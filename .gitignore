@@ -1,0 +1,6 @@
+*.swp
+/build
+/dist
+/cmd/mmdbconvert/mmdbconvert
+/vendor
+.idea
