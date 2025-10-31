@@ -259,13 +259,132 @@ Configuration is via TOML file. See:
 - **Parquet Query Performance:** 10-100x faster with integer columns (see
   `docs/parquet-queries.md`)
 
-## Testing Strategy
+## Function Organization
+
+**Function Ordering**: Functions should be ordered by their call hierarchy
+within files:
+
+- Main/exported functions first
+- Helper functions ordered by when they are first called
+- Utility functions at the bottom
+
+For example, in a handler file:
+
+```go
+// Handler function (main entry point)
+func (h *Handler) SomeHandler(ctx context.Context, r *website.RequestContext) error {
+    // calls helperA, then helperB
+}
+
+// helperA appears first (called first in Handler)
+func helperA() {}
+
+// helperB appears second (called second in Handler)
+func helperB() {}
+
+// utility functions at bottom
+func utilityFunction() {}
+```
+
+This ordering makes code easier to read and understand the flow of execution.
+
+### Function Organization Best Practices
+
+**Call Hierarchy Ordering**: When adding new functions, place them in the order
+they are called:
+
+- This makes the code flow easier to follow
+- Reduces mental overhead when reading the code
+- Makes debugging and maintenance more intuitive
+
+**Example of Good Ordering**:
+
+```go
+// Main handler function
+func (h *Handler) ProcessPayment(ctx context.Context, r *website.RequestContext) error {
+    address := getCustomerAddress(ctx, customerID)  // Called first
+    form := createForm(person, address)             // Called second
+    return processForm(form)                        // Called third
+}
+
+// Helper functions in call order
+func getCustomerAddress(ctx context.Context, customerID string) *Address { /* ... */ }
+func createForm(person *Person, address *Address) *Form { /* ... */ }
+func processForm(form *Form) error { /* ... */ }
+```
+
+## Go errors
+
+- Errors should be wrapped, e.g., `fmt.Errorf("looking up %s: %w", ip, err)`.
+- When wrapping errors, do not using words like "failed", "error", etc. You
+  should instead say what the program was doing.
+
+## Go Testing Best Practices
 
 - **Unit tests:** Every package has `*_test.go` files
 - **Integration tests:** End-to-end tests with small test MMDB files
 - **Test data:** Use existing MaxMind test databases from MaxMind repos
 - **Coverage goal:** >80% overall, 100% for network merging and config
   validation
+
+### Use Testify for Assertions
+
+Use the testify library for test assertions:
+
+- **assert**: Use when the test can continue even if the assertion fails
+- **require**: Use when the test must stop if the assertion fails
+
+```go
+import (
+    "github.com/stretchr/testify/assert"
+    "github.com/stretchr/testify/require"
+)
+
+func TestMyFunction(t *testing.T) {
+    result, err := MyFunction("input")
+    require.NoError(t, err) // Must pass for test to continue
+    assert.Equal(t, "expected", result) // Can fail but test continues
+}
+```
+
+### Prefer Table-Driven Tests
+
+Use table-driven tests for Go code to test multiple scenarios efficiently:
+
+```go
+func TestMyFunction(t *testing.T) {
+    tests := []struct {
+        name     string
+        input    string
+        expected string
+        wantErr  bool
+    }{
+        {
+            name:     "valid input",
+            input:    "test",
+            expected: "result",
+            wantErr:  false,
+        },
+        {
+            name:    "invalid input",
+            input:   "",
+            wantErr: true,
+        },
+    }
+
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            result, err := MyFunction(tt.input)
+            if tt.wantErr {
+                require.Error(t, err)
+                return
+            }
+            require.NoError(t, err)
+            assert.Equal(t, tt.expected, result)
+        })
+    }
+}
+```
 
 ## Contributing
 
