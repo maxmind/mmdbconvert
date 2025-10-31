@@ -1,0 +1,71 @@
+# Parquet Output with All Network Column Types
+# This configuration demonstrates all available network column types and
+# Parquet-specific options.
+
+[output]
+format = "parquet"
+file = "geo-data.parquet"
+
+# Parquet-specific options
+[output.parquet]
+compression = "zstd"                # Compression algorithm: none, snappy, gzip, lz4, zstd
+row_group_size = 500000             # Rows per row group (default: 500000)
+separate_ip_versions = false        # Generate separate IPv4/IPv6 files (default: false)
+
+# Network columns - all types demonstrated
+# Note: For query performance, integer columns (start_int, end_int) should come first
+[[network.columns]]
+name = "start_int"
+type = "start_int"                  # Starting IP as integer (UINT32 for IPv4, BINARY(16) for IPv6)
+
+[[network.columns]]
+name = "end_int"
+type = "end_int"                    # Ending IP as integer
+
+[[network.columns]]
+name = "network"
+type = "cidr"                       # Human-readable CIDR notation
+
+[[network.columns]]
+name = "start_ip"
+type = "start_ip"                   # Starting IP as string
+
+[[network.columns]]
+name = "end_ip"
+type = "end_ip"                     # Ending IP as string
+
+# Database
+[[databases]]
+name = "city"
+path = "GeoIP2-City.mmdb"
+
+# Data columns with type hints for native Parquet types
+[[columns]]
+name = "country_code"
+database = "city"
+path = "/country/iso_code"
+type = "string"                     # Explicit string type (default if not specified)
+
+[[columns]]
+name = "latitude"
+database = "city"
+path = "/location/latitude"
+type = "float64"                    # Native float64 type for numeric data
+
+[[columns]]
+name = "longitude"
+database = "city"
+path = "/location/longitude"
+type = "float64"
+
+[[columns]]
+name = "accuracy_radius"
+database = "city"
+path = "/location/accuracy_radius"
+type = "int64"                      # Native int64 type for integer data
+
+[[columns]]
+name = "city_name"
+database = "city"
+path = "/city/names/en"
+# No type specified - defaults to string

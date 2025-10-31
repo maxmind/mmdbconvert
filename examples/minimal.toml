@@ -1,0 +1,20 @@
+# Minimal mmdbconvert configuration
+# This is the simplest possible configuration that reads from one database
+# and outputs to CSV format.
+
+[output]
+format = "csv"
+file = "output.csv"
+
+# Define the database to read from
+[[databases]]
+name = "geo"
+path = "/path/to/GeoIP2-City.mmdb"
+
+# Extract a single field
+[[columns]]
+name = "country_code"
+database = "geo"
+path = "/country/iso_code"
+
+# Note: Network column defaults to "network" with CIDR notation for CSV

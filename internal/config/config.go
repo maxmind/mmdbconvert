@@ -1,0 +1,246 @@
+// Package config provides TOML configuration parsing and validation for mmdbconvert.
+package config
+
+import (
+	"errors"
+	"fmt"
+	"os"
+
+	"github.com/pelletier/go-toml/v2"
+)
+
+// Config represents the complete configuration file structure.
+type Config struct {
+	Output    OutputConfig  `toml:"output"`
+	Network   NetworkConfig `toml:"network"`
+	Databases []Database    `toml:"databases"`
+	Columns   []Column      `toml:"columns"`
+}
+
+// OutputConfig defines output file settings.
+type OutputConfig struct {
+	Format  string        `toml:"format"`  // "csv" or "parquet"
+	File    string        `toml:"file"`    // Output file path
+	CSV     CSVConfig     `toml:"csv"`     // CSV-specific options
+	Parquet ParquetConfig `toml:"parquet"` // Parquet-specific options
+}
+
+// CSVConfig defines CSV output options.
+type CSVConfig struct {
+	Delimiter     string `toml:"delimiter"`      // Field delimiter (default: ",")
+	IncludeHeader bool   `toml:"include_header"` // Include column headers (default: true)
+}
+
+// ParquetConfig defines Parquet output options.
+type ParquetConfig struct {
+	Compression        string `toml:"compression"`          // "none", "snappy", "gzip", "lz4", "zstd" (default: "snappy")
+	RowGroupSize       int    `toml:"row_group_size"`       // Rows per row group (default: 500000)
+	SeparateIPVersions bool   `toml:"separate_ip_versions"` // Generate separate IPv4/IPv6 files (default: false)
+}
+
+// NetworkConfig defines network column configuration.
+type NetworkConfig struct {
+	Columns []NetworkColumn `toml:"columns"`
+}
+
+// NetworkColumn defines a network column in the output.
+type NetworkColumn struct {
+	Name string `toml:"name"` // Column name
+	Type string `toml:"type"` // "cidr", "start_ip", "end_ip", "start_int", "end_int"
+}
+
+// Database defines an MMDB database source.
+type Database struct {
+	Name string `toml:"name"` // Identifier for referencing in columns
+	Path string `toml:"path"` // Path to MMDB file
+}
+
+// Column defines a data column mapping from MMDB to output.
+type Column struct {
+	Name     string `toml:"name"`     // Output column name
+	Database string `toml:"database"` // Database to read from (references Database.Name)
+	Path     string `toml:"path"`     // JSON pointer path to field
+	Type     string `toml:"type"`     // Optional type hint: "string", "int64", "float64", "bool", "binary"
+}
+
+// LoadConfig loads and parses a TOML configuration file.
+func LoadConfig(path string) (*Config, error) {
+	// #nosec G304 -- path is a user-provided config file path, which is intentional
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read config file: %w", err)
+	}
+
+	var config Config
+	if err := toml.Unmarshal(data, &config); err != nil {
+		return nil, fmt.Errorf("failed to parse TOML: %w", err)
+	}
+
+	// Apply defaults
+	applyDefaults(&config)
+
+	// Validate configuration
+	if err := validate(&config); err != nil {
+		return nil, fmt.Errorf("invalid configuration: %w", err)
+	}
+
+	return &config, nil
+}
+
+// applyDefaults applies default values to configuration.
+func applyDefaults(config *Config) {
+	// CSV defaults
+	if config.Output.CSV.Delimiter == "" {
+		config.Output.CSV.Delimiter = ","
+	}
+	// Default to including headers (but note: TOML defaults bool to false)
+	// We'll handle this by checking if it's explicitly set in validation
+
+	// Parquet defaults
+	if config.Output.Parquet.Compression == "" {
+		config.Output.Parquet.Compression = "snappy"
+	}
+	if config.Output.Parquet.RowGroupSize == 0 {
+		config.Output.Parquet.RowGroupSize = 500000
+	}
+
+	// Network column defaults - apply format-specific defaults if no columns specified
+	if len(config.Network.Columns) == 0 {
+		if config.Output.Format == "parquet" {
+			// Parquet default: integer columns for query performance
+			config.Network.Columns = []NetworkColumn{
+				{Name: "start_int", Type: "start_int"},
+				{Name: "end_int", Type: "end_int"},
+			}
+		} else {
+			// CSV default: human-readable CIDR
+			config.Network.Columns = []NetworkColumn{
+				{Name: "network", Type: "cidr"},
+			}
+		}
+	}
+}
+
+// validate performs comprehensive validation of the configuration.
+func validate(config *Config) error {
+	// Validate output settings
+	if config.Output.Format == "" {
+		return errors.New("output.format is required")
+	}
+	if config.Output.Format != "csv" && config.Output.Format != "parquet" {
+		return fmt.Errorf(
+			"output.format must be 'csv' or 'parquet', got '%s'",
+			config.Output.Format,
+		)
+	}
+	if config.Output.File == "" {
+		return errors.New("output.file is required")
+	}
+
+	// Validate Parquet compression
+	if config.Output.Format == "parquet" {
+		validCompressions := map[string]bool{
+			"none": true, "snappy": true, "gzip": true, "lz4": true, "zstd": true,
+		}
+		if !validCompressions[config.Output.Parquet.Compression] {
+			return fmt.Errorf(
+				"invalid parquet compression '%s', must be one of: none, snappy, gzip, lz4, zstd",
+				config.Output.Parquet.Compression,
+			)
+		}
+	}
+
+	// Validate databases
+	if len(config.Databases) == 0 {
+		return errors.New("at least one database is required")
+	}
+
+	// Check for duplicate database names
+	dbNames := map[string]bool{}
+	for _, db := range config.Databases {
+		if db.Name == "" {
+			return errors.New("database name is required")
+		}
+		if db.Path == "" {
+			return fmt.Errorf("database path is required for database '%s'", db.Name)
+		}
+		if dbNames[db.Name] {
+			return fmt.Errorf("duplicate database name '%s'", db.Name)
+		}
+		dbNames[db.Name] = true
+	}
+
+	// Validate network columns
+	validNetworkTypes := map[string]bool{
+		"cidr": true, "start_ip": true, "end_ip": true, "start_int": true, "end_int": true,
+	}
+	networkColNames := map[string]bool{}
+	for _, col := range config.Network.Columns {
+		if col.Name == "" {
+			return errors.New("network column name is required")
+		}
+		if col.Type == "" {
+			return fmt.Errorf("network column type is required for column '%s'", col.Name)
+		}
+		if !validNetworkTypes[col.Type] {
+			return fmt.Errorf(
+				"invalid network column type '%s' for column '%s', must be one of: cidr, start_ip, end_ip, start_int, end_int",
+				col.Type,
+				col.Name,
+			)
+		}
+		if networkColNames[col.Name] {
+			return fmt.Errorf("duplicate network column name '%s'", col.Name)
+		}
+		networkColNames[col.Name] = true
+	}
+
+	// Validate data columns
+	validDataTypes := map[string]bool{
+		"": true, "string": true, "int64": true, "float64": true, "bool": true, "binary": true,
+	}
+	dataColNames := map[string]bool{}
+	for _, col := range config.Columns {
+		if col.Name == "" {
+			return errors.New("column name is required")
+		}
+		if col.Database == "" {
+			return fmt.Errorf("column database is required for column '%s'", col.Name)
+		}
+		if col.Path == "" {
+			return fmt.Errorf("column path is required for column '%s'", col.Name)
+		}
+
+		// Validate database reference
+		if !dbNames[col.Database] {
+			return fmt.Errorf(
+				"column '%s' references unknown database '%s'",
+				col.Name,
+				col.Database,
+			)
+		}
+
+		// Validate type hint
+		if !validDataTypes[col.Type] {
+			return fmt.Errorf(
+				"invalid type '%s' for column '%s', must be one of: string, int64, float64, bool, binary",
+				col.Type,
+				col.Name,
+			)
+		}
+
+		// Check for duplicate column names (including network columns)
+		if networkColNames[col.Name] {
+			return fmt.Errorf(
+				"duplicate column name '%s' (already used as network column)",
+				col.Name,
+			)
+		}
+		if dataColNames[col.Name] {
+			return fmt.Errorf("duplicate column name '%s'", col.Name)
+		}
+		dataColNames[col.Name] = true
+	}
+
+	return nil
+}

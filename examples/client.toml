@@ -1,0 +1,98 @@
+# Use Case: Merge GeoIP2-Enterprise + GeoIP2-Anonymous-IP
+# This configuration demonstrates merging two MaxMind databases into a single
+# CSV output with data from both sources.
+
+[output]
+format = "csv"
+file = "enterprise-anonymous-merged.csv"
+
+# CSV options (optional, showing defaults)
+[output.csv]
+delimiter = ","
+include_header = true
+
+# Network column (using default CIDR notation)
+[[network.columns]]
+name = "network"
+type = "cidr"
+
+# Define both databases
+[[databases]]
+name = "enterprise"
+path = "/var/lib/GeoIP/GeoIP2-Enterprise.mmdb"
+
+[[databases]]
+name = "anonymous"
+path = "/var/lib/GeoIP/GeoIP2-Anonymous-IP.mmdb"
+
+# GeoIP2-Enterprise fields
+[[columns]]
+name = "country_iso"
+database = "enterprise"
+path = "/country/iso_code"
+
+[[columns]]
+name = "country_name"
+database = "enterprise"
+path = "/country/names/en"
+
+[[columns]]
+name = "subdivision_iso"
+database = "enterprise"
+path = "/subdivisions/0/iso_code"
+
+[[columns]]
+name = "subdivision_name"
+database = "enterprise"
+path = "/subdivisions/0/names/en"
+
+[[columns]]
+name = "city_name"
+database = "enterprise"
+path = "/city/names/en"
+
+[[columns]]
+name = "latitude"
+database = "enterprise"
+path = "/location/latitude"
+
+[[columns]]
+name = "longitude"
+database = "enterprise"
+path = "/location/longitude"
+
+[[columns]]
+name = "accuracy_radius"
+database = "enterprise"
+path = "/location/accuracy_radius"
+
+# GeoIP2-Anonymous-IP fields
+[[columns]]
+name = "is_anonymous"
+database = "anonymous"
+path = "/is_anonymous"
+
+[[columns]]
+name = "is_anonymous_vpn"
+database = "anonymous"
+path = "/is_anonymous_vpn"
+
+[[columns]]
+name = "is_hosting_provider"
+database = "anonymous"
+path = "/is_hosting_provider"
+
+[[columns]]
+name = "is_public_proxy"
+database = "anonymous"
+path = "/is_public_proxy"
+
+[[columns]]
+name = "is_tor_exit_node"
+database = "anonymous"
+path = "/is_tor_exit_node"
+
+[[columns]]
+name = "is_residential_proxy"
+database = "anonymous"
+path = "/is_residential_proxy"
