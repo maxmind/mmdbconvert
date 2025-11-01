@@ -19,10 +19,12 @@ type Config struct {
 
 // OutputConfig defines output file settings.
 type OutputConfig struct {
-	Format  string        `toml:"format"`  // "csv" or "parquet"
-	File    string        `toml:"file"`    // Output file path
-	CSV     CSVConfig     `toml:"csv"`     // CSV-specific options
-	Parquet ParquetConfig `toml:"parquet"` // Parquet-specific options
+	Format   string        `toml:"format"`  // "csv" or "parquet"
+	File     string        `toml:"file"`    // Output file path
+	CSV      CSVConfig     `toml:"csv"`     // CSV-specific options
+	Parquet  ParquetConfig `toml:"parquet"` // Parquet-specific options
+	IPv4File string        `toml:"ipv4_file"`
+	IPv6File string        `toml:"ipv6_file"`
 }
 
 // CSVConfig defines CSV output options.
@@ -33,9 +35,8 @@ type CSVConfig struct {
 
 // ParquetConfig defines Parquet output options.
 type ParquetConfig struct {
-	Compression        string `toml:"compression"`          // "none", "snappy", "gzip", "lz4", "zstd" (default: "snappy")
-	RowGroupSize       int    `toml:"row_group_size"`       // Rows per row group (default: 500000)
-	SeparateIPVersions bool   `toml:"separate_ip_versions"` // Generate separate IPv4/IPv6 files (default: false)
+	Compression  string `toml:"compression"`    // "none", "snappy", "gzip", "lz4", "zstd" (default: "snappy")
+	RowGroupSize int    `toml:"row_group_size"` // Rows per row group (default: 500000)
 }
 
 // NetworkConfig defines network column configuration.
@@ -138,8 +139,15 @@ func validate(config *Config) error {
 			config.Output.Format,
 		)
 	}
-	if config.Output.File == "" {
-		return errors.New("output.file is required")
+	if config.Output.File == "" && (config.Output.IPv4File == "" || config.Output.IPv6File == "") {
+		return errors.New(
+			"either output.file must be set or both output.ipv4_file and output.ipv6_file must be provided",
+		)
+	}
+	if config.Output.File != "" && (config.Output.IPv4File != "" || config.Output.IPv6File != "") {
+		return errors.New(
+			"output.ipv4_file and output.ipv6_file cannot be used together with output.file",
+		)
 	}
 
 	// Validate Parquet compression

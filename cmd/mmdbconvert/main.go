@@ -81,7 +81,11 @@ func run(configPath string, quiet bool) error {
 
 	if !quiet {
 		fmt.Printf("Output format: %s\n", cfg.Output.Format)
-		fmt.Printf("Output file: %s\n", cfg.Output.File)
+		if cfg.Output.File != "" {
+			fmt.Printf("Output file: %s\n", cfg.Output.File)
+		} else {
+			fmt.Printf("Output files: IPv4=%s, IPv6=%s\n", cfg.Output.IPv4File, cfg.Output.IPv6File)
+		}
 		fmt.Printf("Databases: %d\n", len(cfg.Databases))
 		fmt.Printf("Data columns: %d\n", len(cfg.Columns))
 		fmt.Printf("Network columns: %d\n", len(cfg.Network.Columns))
@@ -107,90 +111,15 @@ func run(configPath string, quiet bool) error {
 	}
 	defer readers.Close()
 
-	var (
-		rowWriter   merger.RowWriter
-		closers     []io.Closer
-		outputPaths []string
-	)
+	rowWriter, closers, outputPaths, err := prepareRowWriter(cfg, quiet)
+	if err != nil {
+		return err
+	}
 	defer func() {
 		for _, closer := range closers {
 			closer.Close()
 		}
 	}()
-
-	switch cfg.Output.Format {
-	case "csv":
-		if !quiet {
-			fmt.Println()
-			fmt.Println("Creating output file...")
-		}
-		outputFile, err := os.Create(cfg.Output.File)
-		if err != nil {
-			return fmt.Errorf("failed to create output file: %w", err)
-		}
-		closers = append(closers, outputFile)
-		outputPaths = append(outputPaths, cfg.Output.File)
-		rowWriter = writer.NewCSVWriter(outputFile, cfg)
-	case "parquet":
-		if cfg.Output.Parquet.SeparateIPVersions {
-			if !quiet {
-				fmt.Println()
-				fmt.Println("Creating output files...")
-			}
-			ipv4Path, ipv6Path := splitOutputPaths(cfg.Output.File)
-			// #nosec G304 -- paths come from trusted configuration
-			ipv4File, err := os.Create(ipv4Path)
-			if err != nil {
-				return fmt.Errorf("failed to create IPv4 output file: %w", err)
-			}
-			closers = append(closers, ipv4File)
-			// #nosec G304 -- paths come from trusted configuration
-			ipv6File, err := os.Create(ipv6Path)
-			if err != nil {
-				return fmt.Errorf("failed to create IPv6 output file: %w", err)
-			}
-			closers = append(closers, ipv6File)
-			outputPaths = append(outputPaths, ipv4Path, ipv6Path)
-
-			ipv4Writer, err := writer.NewParquetWriterWithIPVersion(
-				ipv4File,
-				cfg,
-				writer.IPVersion4,
-			)
-			if err != nil {
-				return fmt.Errorf("failed to create IPv4 Parquet writer: %w", err)
-			}
-			ipv6Writer, err := writer.NewParquetWriterWithIPVersion(
-				ipv6File,
-				cfg,
-				writer.IPVersion6,
-			)
-			if err != nil {
-				return fmt.Errorf("failed to create IPv6 Parquet writer: %w", err)
-			}
-			rowWriter = writer.NewSplitRowWriter(ipv4Writer, ipv6Writer)
-		} else {
-			if !quiet {
-				fmt.Println()
-				fmt.Println("Creating output file...")
-			}
-			// #nosec G304 -- paths come from trusted configuration
-			outputFile, err := os.Create(cfg.Output.File)
-			if err != nil {
-				return fmt.Errorf("failed to create output file: %w", err)
-			}
-			closers = append(closers, outputFile)
-			outputPaths = append(outputPaths, cfg.Output.File)
-
-			parquetWriter, err := writer.NewParquetWriter(outputFile, cfg)
-			if err != nil {
-				return fmt.Errorf("failed to create Parquet writer: %w", err)
-			}
-			rowWriter = parquetWriter
-		}
-	default:
-		return fmt.Errorf("unsupported output format: %s", cfg.Output.Format)
-	}
 
 	if !quiet {
 		fmt.Println("Merging databases and writing output...")
@@ -226,7 +155,151 @@ func run(configPath string, quiet bool) error {
 	return nil
 }
 
-func splitOutputPaths(base string) (ipv4Path, ipv6Path string) {
+func prepareRowWriter(
+	cfg *config.Config,
+	quiet bool,
+) (merger.RowWriter, []io.Closer, []string, error) {
+	var (
+		closers     []io.Closer
+		outputPaths []string
+	)
+
+	closeAll := func() {
+		for _, closer := range closers {
+			closer.Close()
+		}
+	}
+
+	switch cfg.Output.Format {
+	case "csv":
+		if cfg.Output.IPv4File != "" && cfg.Output.IPv6File != "" {
+			if !quiet {
+				fmt.Println()
+				fmt.Println("Creating output files...")
+			}
+			ipv4Path, ipv6Path := splitConfiguredPaths(
+				cfg.Output.File,
+				cfg.Output.IPv4File,
+				cfg.Output.IPv6File,
+			)
+			ipv4File, err := createOutputFile(ipv4Path)
+			if err != nil {
+				closeAll()
+				return nil, nil, nil, fmt.Errorf("failed to create IPv4 output file: %w", err)
+			}
+			closers = append(closers, ipv4File)
+			outputPaths = append(outputPaths, ipv4Path)
+
+			ipv6File, err := createOutputFile(ipv6Path)
+			if err != nil {
+				closeAll()
+				return nil, nil, nil, fmt.Errorf("failed to create IPv6 output file: %w", err)
+			}
+			closers = append(closers, ipv6File)
+			outputPaths = append(outputPaths, ipv6Path)
+
+			return writer.NewSplitRowWriter(
+				writer.NewCSVWriter(ipv4File, cfg),
+				writer.NewCSVWriter(ipv6File, cfg),
+			), closers, outputPaths, nil
+		}
+
+		if !quiet {
+			fmt.Println()
+			fmt.Println("Creating output file...")
+		}
+		outputFile, err := createOutputFile(cfg.Output.File)
+		if err != nil {
+			closeAll()
+			return nil, nil, nil, fmt.Errorf("failed to create output file: %w", err)
+		}
+		closers = append(closers, outputFile)
+		outputPaths = append(outputPaths, cfg.Output.File)
+		return writer.NewCSVWriter(outputFile, cfg), closers, outputPaths, nil
+
+	case "parquet":
+		if cfg.Output.IPv4File != "" && cfg.Output.IPv6File != "" {
+			if !quiet {
+				fmt.Println()
+				fmt.Println("Creating output files...")
+			}
+			ipv4Path, ipv6Path := splitConfiguredPaths(
+				cfg.Output.File,
+				cfg.Output.IPv4File,
+				cfg.Output.IPv6File,
+			)
+
+			ipv4File, err := createOutputFile(ipv4Path)
+			if err != nil {
+				closeAll()
+				return nil, nil, nil, fmt.Errorf("failed to create IPv4 output file: %w", err)
+			}
+			closers = append(closers, ipv4File)
+			outputPaths = append(outputPaths, ipv4Path)
+
+			ipv6File, err := createOutputFile(ipv6Path)
+			if err != nil {
+				closeAll()
+				return nil, nil, nil, fmt.Errorf("failed to create IPv6 output file: %w", err)
+			}
+			closers = append(closers, ipv6File)
+			outputPaths = append(outputPaths, ipv6Path)
+
+			ipv4Writer, err := writer.NewParquetWriterWithIPVersion(
+				ipv4File,
+				cfg,
+				writer.IPVersion4,
+			)
+			if err != nil {
+				closeAll()
+				return nil, nil, nil, fmt.Errorf("failed to create IPv4 Parquet writer: %w", err)
+			}
+			ipv6Writer, err := writer.NewParquetWriterWithIPVersion(
+				ipv6File,
+				cfg,
+				writer.IPVersion6,
+			)
+			if err != nil {
+				closeAll()
+				return nil, nil, nil, fmt.Errorf("failed to create IPv6 Parquet writer: %w", err)
+			}
+			return writer.NewSplitRowWriter(ipv4Writer, ipv6Writer), closers, outputPaths, nil
+		}
+
+		if !quiet {
+			fmt.Println()
+			fmt.Println("Creating output file...")
+		}
+		outputFile, err := createOutputFile(cfg.Output.File)
+		if err != nil {
+			closeAll()
+			return nil, nil, nil, fmt.Errorf("failed to create output file: %w", err)
+		}
+		closers = append(closers, outputFile)
+		outputPaths = append(outputPaths, cfg.Output.File)
+
+		parquetWriter, err := writer.NewParquetWriter(outputFile, cfg)
+		if err != nil {
+			closeAll()
+			return nil, nil, nil, fmt.Errorf("failed to create Parquet writer: %w", err)
+		}
+		return parquetWriter, closers, outputPaths, nil
+	}
+
+	closeAll()
+	return nil, nil, nil, fmt.Errorf("unsupported output format: %s", cfg.Output.Format)
+}
+
+func createOutputFile(path string) (*os.File, error) {
+	// #nosec G304 -- paths come from trusted configuration
+	file, err := os.Create(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create %s: %w", path, err)
+	}
+	return file, nil
+}
+
+func splitConfiguredPaths(base, ipv4Override, ipv6Override string) (ipv4, ipv6 string) {
 	ext := filepath.Ext(base)
 	name := strings.TrimSuffix(base, ext)
 	if name == "" {
@@ -235,9 +308,20 @@ func splitOutputPaths(base string) (ipv4Path, ipv6Path string) {
 	if ext == "" {
 		ext = ".parquet"
 	}
-	ipv4Path = fmt.Sprintf("%s_ipv4%s", name, ext)
-	ipv6Path = fmt.Sprintf("%s_ipv6%s", name, ext)
-	return ipv4Path, ipv6Path
+
+	defaultIPv4 := fmt.Sprintf("%s_ipv4%s", name, ext)
+	defaultIPv6 := fmt.Sprintf("%s_ipv6%s", name, ext)
+
+	ipv4 = ipv4Override
+	if ipv4 == "" {
+		ipv4 = defaultIPv4
+	}
+	ipv6 = ipv6Override
+	if ipv6 == "" {
+		ipv6 = defaultIPv6
+	}
+
+	return ipv4, ipv6
 }
 
 func usage() {

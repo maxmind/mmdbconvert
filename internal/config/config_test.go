@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestLoadConfig_Valid(t *testing.T) {
@@ -42,6 +44,9 @@ path = "/country/iso_code"
 				if len(cfg.Columns) != 1 {
 					t.Errorf("expected 1 column, got %d", len(cfg.Columns))
 				}
+				if cfg.Output.CSV.IncludeHeader == nil || !*cfg.Output.CSV.IncludeHeader {
+					t.Error("expected include_header default true")
+				}
 				// Check CSV defaults
 				if cfg.Output.CSV.Delimiter != "," {
 					t.Errorf("expected default delimiter=',', got %s", cfg.Output.CSV.Delimiter)
@@ -58,6 +63,32 @@ path = "/country/iso_code"
 						"expected default network column type=cidr, got %s",
 						cfg.Network.Columns[0].Type,
 					)
+				}
+			},
+		},
+		{
+			name: "per-IP version files",
+			toml: `
+[output]
+format = "csv"
+ipv4_file = "v4.csv"
+ipv6_file = "v6.csv"
+
+[[databases]]
+name = "geo"
+path = "/path/to/geo.mmdb"
+
+[[columns]]
+name = "country"
+database = "geo"
+path = "/country/iso_code"
+`,
+			validate: func(t *testing.T, cfg *Config) {
+				if cfg.Output.File != "" {
+					t.Error("expected output.file empty when splitting")
+				}
+				if cfg.Output.IPv4File != "v4.csv" || cfg.Output.IPv6File != "v6.csv" {
+					t.Error("missing per-version filenames")
 				}
 			},
 		},
@@ -208,6 +239,59 @@ path = "/country/iso_code"
 	}
 }
 
+func TestLoadConfig_InvalidMixedOutputs(t *testing.T) {
+	const toml = `
+[output]
+format = "csv"
+file = "combined.csv"
+ipv4_file = "v4.csv"
+
+[[databases]]
+name = "geo"
+path = "/path/to/geo.mmdb"
+
+[[columns]]
+name = "country"
+database = "geo"
+path = "/country/iso_code"
+`
+
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "config.toml")
+	require.NoError(t, os.WriteFile(path, []byte(toml), 0o644))
+
+	_, err := LoadConfig(path)
+	if err == nil || !strings.Contains(err.Error(), "cannot be used together") {
+		t.Fatalf("expected error about mutually exclusive files, got %v", err)
+	}
+}
+
+func TestLoadConfig_InvalidPartialSplit(t *testing.T) {
+	const toml = `
+[output]
+format = "csv"
+ipv4_file = "v4.csv"
+
+[[databases]]
+name = "geo"
+path = "/path/to/geo.mmdb"
+
+[[columns]]
+name = "country"
+database = "geo"
+path = "/country/iso_code"
+`
+
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "config.toml")
+	require.NoError(t, os.WriteFile(path, []byte(toml), 0o644))
+
+	_, err := LoadConfig(path)
+	if err == nil || !strings.Contains(err.Error(), "either output.file must be set") {
+		t.Fatalf("expected error about providing both ipv4 and ipv6 files, got %v", err)
+	}
+}
+
 func TestLoadConfig_Invalid(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -264,7 +348,7 @@ name = "country"
 database = "geo"
 path = "/country/iso_code"
 `,
-			expectError: "output.file is required",
+			expectError: "either output.file must be set or both output.ipv4_file and output.ipv6_file must be provided",
 		},
 		{
 			name: "no databases",

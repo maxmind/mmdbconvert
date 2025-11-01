@@ -32,7 +32,9 @@ The `[output]` section defines where and how data should be written.
 ```toml
 [output]
 format = "csv"    # Output format: "csv" or "parquet"
-file = "output.csv"  # Output file path
+file = "output.csv"  # Output file path (use this for a combined file)
+# ipv4_file = "output_ipv4.csv"  # Optional IPv4-only file (requires ipv6_file and no file)
+# ipv6_file = "output_ipv6.csv"  # Optional IPv6-only file (requires ipv4_file and no file)
 ```
 
 #### CSV Options
@@ -52,6 +54,21 @@ When `format = "parquet"`, you can specify Parquet-specific options:
 ```toml
 [output.parquet]
 compression = "snappy"  # Compression: "none", "snappy", "gzip", "lz4", "zstd" (default: "snappy")
+
+#### Splitting IPv4 and IPv6 Output
+
+Set `output.ipv4_file` and `output.ipv6_file` to write IPv4 and IPv6 rows to
+separate files. When these fields are present, omit `output.file`. This works
+for both CSV and Parquet outputs.
+
+```
+
+[output] format = "parquet" ipv4_file = "merged_ipv4.parquet" ipv6_file =
+"merged_ipv6.parquet"
+
+```
+
+When splitting output, both `ipv4_file` and `ipv6_file` must be configured.
 ```
 
 ### Network Columns
