@@ -153,14 +153,14 @@ func (w *ParquetWriter) generateNetworkColumnValue(
 		}
 		if w.ipVersion == ipVersion4 {
 			return nil, errors.New(
-				"start_int column type only supports IPv4 in this configuration; enable separate_ip_versions for IPv6 support",
+				"start_int column type only supports IPv4 in IPv4-only Parquet files; configure output.ipv4_file and output.ipv6_file to emit IPv6 integer columns",
 			)
 		}
 		if w.ipVersion == ipVersion6 {
 			return ipv6IntBytes(addr), nil
 		}
 		return nil, errors.New(
-			"start_int column type only supports IPv4 unless separate_ip_versions is enabled",
+			"start_int column type only supports IPv4 unless you configure output.ipv4_file and output.ipv6_file",
 		)
 
 	case NetworkColumnEndInt:
@@ -173,14 +173,14 @@ func (w *ParquetWriter) generateNetworkColumnValue(
 		}
 		if w.ipVersion == ipVersion4 {
 			return nil, errors.New(
-				"end_int column type only supports IPv4 in this configuration; enable separate_ip_versions for IPv6 support",
+				"end_int column type only supports IPv4 in IPv4-only Parquet files; configure output.ipv4_file and output.ipv6_file to emit IPv6 integer columns",
 			)
 		}
 		if w.ipVersion == ipVersion6 {
 			return ipv6IntBytes(endIP), nil
 		}
 		return nil, errors.New(
-			"end_int column type only supports IPv4 unless separate_ip_versions is enabled",
+			"end_int column type only supports IPv4 unless you configure output.ipv4_file and output.ipv6_file",
 		)
 
 	default:

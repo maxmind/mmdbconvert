@@ -10,7 +10,7 @@ file = "geo-data.parquet"
 [output.parquet]
 compression = "zstd"                # Compression algorithm: none, snappy, gzip, lz4, zstd
 row_group_size = 500000             # Rows per row group (default: 500000)
-separate_ip_versions = false        # Generate separate IPv4/IPv6 files (default: false)
+# To split IPv4/IPv6 output, configure output.ipv4_file and output.ipv6_file in the [output] section
 
 # Network columns - all types demonstrated
 # Note: For query performance, integer columns (start_int, end_int) should come first

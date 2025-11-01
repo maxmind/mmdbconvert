@@ -320,12 +320,14 @@ SELECT * FROM read_parquet('geo.parquet')
 WHERE start_ip <= '2001:db8::1' AND end_ip >= '2001:db8::1';
 ```
 
-**Recommendation:** For better IPv6 performance, use the `separate_ip_versions`
-option to create separate files:
+**Recommendation:** For better IPv6 performance, write IPv4 and IPv6 rows to
+dedicated files:
 
 ```toml
-[output.parquet]
-separate_ip_versions = true  # Creates geo_ipv4.parquet and geo_ipv6.parquet
+[output]
+format = "parquet"
+ipv4_file = "geo_ipv4.parquet"
+ipv6_file = "geo_ipv6.parquet"
 ```
 
 ## Common Query Patterns
@@ -496,8 +498,10 @@ spark.conf.set("spark.sql.parquet.filterPushdown", "true")
 ✅ **Consider separate IPv4/IPv6 files for large datasets**
 
 ```toml
-[output.parquet]
-separate_ip_versions = true
+[output]
+format = "parquet"
+ipv4_file = "geo_ipv4.parquet"
+ipv6_file = "geo_ipv6.parquet"
 ```
 
 ✅ **Tune row group size for your use case**

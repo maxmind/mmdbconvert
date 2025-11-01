@@ -15,7 +15,7 @@ file = "geo-optimized.parquet"
 [output.parquet]
 compression = "snappy"              # Best balance for analytics queries
 row_group_size = 500000             # ~250 MB per row group for optimal parallelism
-separate_ip_versions = false        # Set to true for very large datasets
+# To split IPv4/IPv6 output, configure output.ipv4_file and output.ipv6_file in the [output] section
 
 # CRITICAL: Integer columns FIRST for query performance
 # Query engines use min/max statistics on these columns to skip entire row groups

@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"net/netip"
+	"strings"
 
 	"github.com/oschwald/maxminddb-golang/v2"
 
@@ -57,6 +58,10 @@ func (m *Merger) Merge() error {
 		}
 		readers = append(readers, reader)
 		dbNamesList = append(dbNamesList, name)
+	}
+
+	if err := validateIPVersions(readers, dbNamesList); err != nil {
+		return err
 	}
 
 	// Store readers and names in the merger for easy access
@@ -187,4 +192,44 @@ func (m *Merger) getUniqueDatabaseNames() []string {
 	}
 
 	return names
+}
+
+func validateIPVersions(readers []*mmdb.Reader, names []string) error {
+	var (
+		ipv4Only     []string
+		ipv6Capable  []string
+		unsupportedV []string
+	)
+
+	for idx, reader := range readers {
+		version := reader.Metadata().IPVersion
+		switch version {
+		case 4:
+			ipv4Only = append(ipv4Only, names[idx])
+		case 6:
+			ipv6Capable = append(ipv6Capable, names[idx])
+		default:
+			unsupportedV = append(
+				unsupportedV,
+				fmt.Sprintf("%s (ip_version=%d)", names[idx], version),
+			)
+		}
+	}
+
+	if len(unsupportedV) > 0 {
+		return fmt.Errorf(
+			"unsupported ip_version values reported: %s",
+			strings.Join(unsupportedV, ", "),
+		)
+	}
+
+	if len(ipv4Only) > 0 && len(ipv6Capable) > 0 {
+		return fmt.Errorf(
+			"configured databases mix IPv4-only (%s) and IPv6-capable (%s) files; run separate conversions per IP version or supply homogeneous databases",
+			strings.Join(ipv4Only, ", "),
+			strings.Join(ipv6Capable, ", "),
+		)
+	}
+
+	return nil
 }

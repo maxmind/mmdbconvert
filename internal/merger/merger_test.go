@@ -245,6 +245,29 @@ func TestMerger_MissingDatabase(t *testing.T) {
 	assert.Contains(t, err.Error(), "nonexistent")
 }
 
+func TestMerger_MixedIPVersionsFails(t *testing.T) {
+	databases := map[string]string{
+		"ipv4": testDataDir + "/MaxMind-DB-test-ipv4-24.mmdb",
+		"ipv6": testDataDir + "/MaxMind-DB-test-ipv6-32.mmdb",
+	}
+
+	readers, err := mmdb.OpenDatabases(databases)
+	require.NoError(t, err)
+	defer readers.Close()
+
+	cfg := &config.Config{
+		Columns: []config.Column{
+			{Name: "v4", Database: "ipv4", Path: "/value"},
+			{Name: "v6", Database: "ipv6", Path: "/value"},
+		},
+	}
+
+	merger := NewMerger(readers, cfg, &mockWriter{})
+	err = merger.Merge()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "mix IPv4-only")
+}
+
 func TestMerger_NoColumns(t *testing.T) {
 	databases := map[string]string{
 		"city": cityTestDB,
