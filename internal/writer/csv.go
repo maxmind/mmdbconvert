@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"math/big"
 	"net/netip"
 	"strconv"
 
@@ -27,6 +28,7 @@ type CSVWriter struct {
 	writer        *csv.Writer
 	config        *config.Config
 	headerWritten bool
+	headerEnabled bool
 }
 
 // NewCSVWriter creates a new CSV writer.
@@ -38,16 +40,23 @@ func NewCSVWriter(w io.Writer, cfg *config.Config) *CSVWriter {
 		csvWriter.Comma = rune(cfg.Output.CSV.Delimiter[0])
 	}
 
+	headerEnabled := true
+	if cfg.Output.CSV.IncludeHeader != nil {
+		headerEnabled = *cfg.Output.CSV.IncludeHeader
+	}
+
 	return &CSVWriter{
-		writer: csvWriter,
-		config: cfg,
+		writer:        csvWriter,
+		config:        cfg,
+		headerEnabled: headerEnabled,
+		headerWritten: !headerEnabled,
 	}
 }
 
 // WriteRow writes a single row with network prefix and column data.
 func (w *CSVWriter) WriteRow(prefix netip.Prefix, data map[string]any) error {
 	// Write header on first row
-	if !w.headerWritten {
+	if w.headerEnabled && !w.headerWritten {
 		if err := w.writeHeader(); err != nil {
 			return fmt.Errorf("failed to write CSV header: %w", err)
 		}
@@ -133,9 +142,6 @@ func (w *CSVWriter) generateNetworkColumnValue(
 		if addr.Is4() {
 			return strconv.FormatUint(uint64(network.IPv4ToUint32(addr)), 10), nil
 		}
-		// For IPv6, we need to represent as a 128-bit integer
-		// CSV doesn't have native 128-bit support, so we'll use string representation
-		// This is primarily for Parquet, but we support it in CSV too
 		return formatIPv6AsInt(addr), nil
 
 	case NetworkColumnEndInt:
@@ -152,14 +158,10 @@ func (w *CSVWriter) generateNetworkColumnValue(
 
 // formatIPv6AsInt formats an IPv6 address as a decimal integer string.
 func formatIPv6AsInt(addr netip.Addr) string {
-	// IPv6 is 128 bits, represented as hex bytes
-	// We convert to a big integer string representation
-	bytes := addr.As16()
-
-	// Simple implementation: convert hex bytes to decimal string
-	// For proper big integer support, we'd use math/big, but for CSV
-	// we can represent it as a hex string prefixed with 0x
-	return fmt.Sprintf("0x%032x", bytes)
+	var i big.Int
+	b := addr.As16()
+	i.SetBytes(b[:])
+	return i.String()
 }
 
 // convertToString converts a value to its CSV string representation.

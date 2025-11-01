@@ -13,6 +13,19 @@ import (
 	"github.com/maxmind/mmdbconvert/internal/network"
 )
 
+const (
+	ipVersionAny = 0
+	ipVersion4   = 4
+	ipVersion6   = 6
+
+	// IPVersionAny represents a Parquet writer that accepts both IPv4 and IPv6 rows.
+	IPVersionAny = ipVersionAny
+	// IPVersion4 constrains a Parquet writer to IPv4 rows.
+	IPVersion4 = ipVersion4
+	// IPVersion6 constrains a Parquet writer to IPv6 rows.
+	IPVersion6 = ipVersion6
+)
+
 // ParquetWriter writes merged MMDB data to Parquet format.
 type ParquetWriter struct {
 	writer       *parquet.GenericWriter[map[string]any]
@@ -20,12 +33,23 @@ type ParquetWriter struct {
 	schema       *parquet.Schema
 	rowGroupSize int
 	rowCount     int
+	ipVersion    int
 }
 
 // NewParquetWriter creates a new Parquet writer.
 func NewParquetWriter(w io.Writer, cfg *config.Config) (*ParquetWriter, error) {
+	return NewParquetWriterWithIPVersion(w, cfg, ipVersionAny)
+}
+
+// NewParquetWriterWithIPVersion creates a Parquet writer scoped to a specific IP version.
+// ipVersion should be 0 (mixed), 4, or 6.
+func NewParquetWriterWithIPVersion(
+	w io.Writer,
+	cfg *config.Config,
+	ipVersion int,
+) (*ParquetWriter, error) {
 	// Build schema from config
-	schema, err := buildSchema(cfg)
+	schema, err := buildSchema(cfg, ipVersion)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build Parquet schema: %w", err)
 	}
@@ -48,6 +72,7 @@ func NewParquetWriter(w io.Writer, cfg *config.Config) (*ParquetWriter, error) {
 		config:       cfg,
 		schema:       schema,
 		rowGroupSize: cfg.Output.Parquet.RowGroupSize,
+		ipVersion:    ipVersion,
 	}, nil
 }
 
@@ -121,19 +146,41 @@ func (w *ParquetWriter) generateNetworkColumnValue(
 
 	case NetworkColumnStartInt:
 		if addr.Is4() {
+			if w.ipVersion == ipVersion6 {
+				return nil, errors.New("encountered IPv4 address in IPv6-specific writer")
+			}
 			return int64(network.IPv4ToUint32(addr)), nil
 		}
+		if w.ipVersion == ipVersion4 {
+			return nil, errors.New(
+				"start_int column type only supports IPv4 in this configuration; enable separate_ip_versions for IPv6 support",
+			)
+		}
+		if w.ipVersion == ipVersion6 {
+			return ipv6IntBytes(addr), nil
+		}
 		return nil, errors.New(
-			"start_int column type only supports IPv4; use start_ip for IPv6 addresses",
+			"start_int column type only supports IPv4 unless separate_ip_versions is enabled",
 		)
 
 	case NetworkColumnEndInt:
 		endIP := network.CalculateEndIP(prefix)
 		if endIP.Is4() {
+			if w.ipVersion == ipVersion6 {
+				return nil, errors.New("encountered IPv4 address in IPv6-specific writer")
+			}
 			return int64(network.IPv4ToUint32(endIP)), nil
 		}
+		if w.ipVersion == ipVersion4 {
+			return nil, errors.New(
+				"end_int column type only supports IPv4 in this configuration; enable separate_ip_versions for IPv6 support",
+			)
+		}
+		if w.ipVersion == ipVersion6 {
+			return ipv6IntBytes(endIP), nil
+		}
 		return nil, errors.New(
-			"end_int column type only supports IPv4; use end_ip for IPv6 addresses",
+			"end_int column type only supports IPv4 unless separate_ip_versions is enabled",
 		)
 
 	default:
@@ -142,12 +189,12 @@ func (w *ParquetWriter) generateNetworkColumnValue(
 }
 
 // buildSchema builds a Parquet schema from the config.
-func buildSchema(cfg *config.Config) (*parquet.Schema, error) {
+func buildSchema(cfg *config.Config, ipVersion int) (*parquet.Schema, error) {
 	fields := make(parquet.Group)
 
 	// Add network columns
 	for _, netCol := range cfg.Network.Columns {
-		node, err := buildNetworkNode(netCol)
+		node, err := buildNetworkNode(netCol, ipVersion)
 		if err != nil {
 			return nil, fmt.Errorf(
 				"failed to build node for network column '%s': %w",
@@ -172,20 +219,28 @@ func buildSchema(cfg *config.Config) (*parquet.Schema, error) {
 }
 
 // buildNetworkNode builds a Parquet node for a network column.
-func buildNetworkNode(col config.NetworkColumn) (parquet.Node, error) {
+func buildNetworkNode(col config.NetworkColumn, ipVersion int) (parquet.Node, error) {
 	switch col.Type {
 	case NetworkColumnCIDR, NetworkColumnStartIP, NetworkColumnEndIP:
 		// String columns
 		return parquet.Optional(parquet.String()), nil
 
 	case NetworkColumnStartInt, NetworkColumnEndInt:
-		// Integer columns for IPv4 (int64), binary for IPv6
-		// We'll use int64 for IPv4 compatibility, but handle IPv6 as binary at write time
+		if ipVersion == ipVersion6 {
+			return parquet.Optional(parquet.Leaf(parquet.FixedLenByteArrayType(16))), nil
+		}
 		return parquet.Optional(parquet.Int(64)), nil
 
 	default:
 		return nil, fmt.Errorf("unknown network column type: %s", col.Type)
 	}
+}
+
+func ipv6IntBytes(addr netip.Addr) []byte {
+	b := addr.As16()
+	out := make([]byte, 16)
+	copy(out, b[:])
+	return out
 }
 
 // buildDataNode builds a Parquet node for a data column.

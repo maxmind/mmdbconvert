@@ -130,6 +130,18 @@ func TestCSVWriter_NetworkColumns(t *testing.T) {
 			expected: []string{"3232235776", "3232236031"},
 		},
 		{
+			name: "IPv6 start/end integers",
+			columns: []config.NetworkColumn{
+				{Name: "start_int", Type: "start_int"},
+				{Name: "end_int", Type: "end_int"},
+			},
+			prefix: "2001:db8::/126",
+			expected: []string{
+				"42540766411282592856903984951653826560",
+				"42540766411282592856903984951653826563",
+			},
+		},
+		{
 			name: "all network column types",
 			columns: []config.NetworkColumn{
 				{Name: "network", Type: "cidr"},
@@ -208,6 +220,38 @@ func TestCSVWriter_IPv6(t *testing.T) {
 	assert.Equal(t, "2001:db8::/32", values[0])
 	assert.Equal(t, "2001:db8::", values[1])
 	assert.Equal(t, "2001:db8:ffff:ffff:ffff:ffff:ffff:ffff", values[2])
+}
+
+func TestCSVWriter_DisableHeader(t *testing.T) {
+	buf := &bytes.Buffer{}
+	f := false
+	cfg := &config.Config{
+		Output: config.OutputConfig{
+			CSV: config.CSVConfig{
+				Delimiter:     ",",
+				IncludeHeader: &f,
+			},
+		},
+		Network: config.NetworkConfig{
+			Columns: []config.NetworkColumn{
+				{Name: "network", Type: "cidr"},
+			},
+		},
+		Columns: []config.Column{{Name: "value", Type: "string"}},
+	}
+
+	writer := NewCSVWriter(buf, cfg)
+	require.NoError(
+		t,
+		writer.WriteRow(
+			netip.MustParsePrefix("10.0.0.0/24"),
+			map[string]any{"value": "row"},
+		),
+	)
+	require.NoError(t, writer.Flush())
+
+	output := strings.TrimSpace(buf.String())
+	assert.Equal(t, "10.0.0.0/24,row", output)
 }
 
 func TestCSVWriter_DataTypes(t *testing.T) {

@@ -28,7 +28,7 @@ type OutputConfig struct {
 // CSVConfig defines CSV output options.
 type CSVConfig struct {
 	Delimiter     string `toml:"delimiter"`      // Field delimiter (default: ",")
-	IncludeHeader bool   `toml:"include_header"` // Include column headers (default: true)
+	IncludeHeader *bool  `toml:"include_header"` // Include column headers (default: true)
 }
 
 // ParquetConfig defines Parquet output options.
@@ -93,8 +93,9 @@ func applyDefaults(config *Config) {
 	if config.Output.CSV.Delimiter == "" {
 		config.Output.CSV.Delimiter = ","
 	}
-	// Default to including headers (but note: TOML defaults bool to false)
-	// We'll handle this by checking if it's explicitly set in validation
+	if config.Output.CSV.IncludeHeader == nil {
+		config.Output.CSV.IncludeHeader = boolPtr(true)
+	}
 
 	// Parquet defaults
 	if config.Output.Parquet.Compression == "" {
@@ -119,6 +120,10 @@ func applyDefaults(config *Config) {
 			}
 		}
 	}
+}
+
+func boolPtr(v bool) *bool {
+	return &v
 }
 
 // validate performs comprehensive validation of the configuration.

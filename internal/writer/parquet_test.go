@@ -233,6 +233,47 @@ func TestParquetWriter_NilValues(t *testing.T) {
 	assert.Equal(t, int64(1), pf.NumRows())
 }
 
+func TestParquetWriter_IPv6StartInt(t *testing.T) {
+	buf := &bytes.Buffer{}
+
+	cfg := &config.Config{
+		Output: config.OutputConfig{
+			Parquet: config.ParquetConfig{
+				Compression:  "none",
+				RowGroupSize: 100,
+			},
+		},
+		Network: config.NetworkConfig{
+			Columns: []config.NetworkColumn{
+				{Name: "start_int", Type: "start_int"},
+				{Name: "end_int", Type: "end_int"},
+			},
+		},
+		Columns: []config.Column{},
+	}
+
+	writer, err := NewParquetWriterWithIPVersion(buf, cfg, IPVersion6)
+	require.NoError(t, err)
+
+	prefix := netip.MustParsePrefix("2001:db8::/126")
+	require.NoError(t, writer.WriteRow(prefix, map[string]any{}))
+	require.NoError(t, writer.Flush())
+
+	pf, err := parquet.OpenFile(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
+	require.NoError(t, err)
+
+	assert.Equal(t, int64(1), pf.NumRows())
+	startCol, ok := pf.Schema().Lookup("start_int")
+	require.True(t, ok)
+	assert.Equal(t, parquet.FixedLenByteArray, startCol.Node.Type().Kind())
+	assert.Equal(t, 16, startCol.Node.Type().Length())
+
+	endCol, ok := pf.Schema().Lookup("end_int")
+	require.True(t, ok)
+	assert.Equal(t, parquet.FixedLenByteArray, endCol.Node.Type().Kind())
+	assert.Equal(t, 16, endCol.Node.Type().Length())
+}
+
 func TestParquetWriter_Compression(t *testing.T) {
 	compressions := []string{"none", "snappy", "gzip", "lz4", "zstd"}
 
