@@ -23,6 +23,11 @@ type RowWriter interface {
 	WriteRow(prefix netip.Prefix, data map[string]any) error
 }
 
+// RangeRowWriter can accept full start/end ranges instead of prefixes.
+type RangeRowWriter interface {
+	WriteRange(start, end netip.Addr, data map[string]any) error
+}
+
 // Accumulator accumulates adjacent networks with identical data and flushes
 // them as CIDRs when data changes. This enables O(1) memory usage.
 type Accumulator struct {
@@ -82,6 +87,19 @@ func (a *Accumulator) Process(prefix netip.Prefix, data map[string]any) error {
 // An accumulated range may produce multiple CIDRs if it doesn't align perfectly.
 func (a *Accumulator) Flush() error {
 	if a.current == nil {
+		return nil
+	}
+
+	if rangeWriter, ok := a.writer.(RangeRowWriter); ok {
+		if err := rangeWriter.WriteRange(a.current.StartIP, a.current.EndIP, a.current.Data); err != nil {
+			return fmt.Errorf(
+				"failed to write range %s-%s: %w",
+				a.current.StartIP,
+				a.current.EndIP,
+				err,
+			)
+		}
+		a.current = nil
 		return nil
 	}
 

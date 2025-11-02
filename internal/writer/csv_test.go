@@ -187,6 +187,40 @@ func TestCSVWriter_NetworkColumns(t *testing.T) {
 	}
 }
 
+func TestCSVWriter_WriteRange(t *testing.T) {
+	buf := &bytes.Buffer{}
+
+	cfg := &config.Config{
+		Output: config.OutputConfig{
+			CSV: config.CSVConfig{
+				Delimiter: ",",
+			},
+		},
+		Network: config.NetworkConfig{
+			Columns: []config.NetworkColumn{
+				{Name: "start_ip", Type: "start_ip"},
+				{Name: "end_ip", Type: "end_ip"},
+			},
+		},
+		Columns: []config.Column{
+			{Name: "country", Type: "string"},
+		},
+	}
+
+	writer := NewCSVWriter(buf, cfg)
+	start := netip.MustParseAddr("1.0.1.0")
+	end := netip.MustParseAddr("1.0.3.255")
+
+	err := writer.WriteRange(start, end, map[string]any{"country": "CN"})
+	require.NoError(t, err)
+	require.NoError(t, writer.Flush())
+
+	lines := strings.Split(strings.TrimSpace(buf.String()), "\n")
+	require.Len(t, lines, 2)
+	assert.Equal(t, "start_ip,end_ip,country", lines[0])
+	assert.Equal(t, "1.0.1.0,1.0.3.255,CN", lines[1])
+}
+
 func TestCSVWriter_IPv6(t *testing.T) {
 	buf := &bytes.Buffer{}
 

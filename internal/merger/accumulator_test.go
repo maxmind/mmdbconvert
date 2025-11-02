@@ -17,6 +17,16 @@ type mockWriter struct {
 	found   bool
 }
 
+type mockRangeWriter struct {
+	rows   []mockRow
+	ranges []struct {
+		start netip.Addr
+		end   netip.Addr
+		data  map[string]any
+	}
+	writeErr error
+}
+
 type mockRow struct {
 	prefix netip.Prefix
 	data   map[string]any
@@ -33,6 +43,24 @@ func (m *mockWriter) WriteRow(prefix netip.Prefix, data map[string]any) error {
 	dataCopy := maps.Clone(data)
 	m.rows = append(m.rows, mockRow{prefix: prefix, data: dataCopy})
 	return nil
+}
+
+func (m *mockRangeWriter) WriteRow(prefix netip.Prefix, data map[string]any) error {
+	m.rows = append(m.rows, mockRow{prefix: prefix, data: maps.Clone(data)})
+	return nil
+}
+
+func (m *mockRangeWriter) WriteRange(start, end netip.Addr, data map[string]any) error {
+	m.ranges = append(m.ranges, struct {
+		start netip.Addr
+		end   netip.Addr
+		data  map[string]any
+	}{
+		start: start,
+		end:   end,
+		data:  maps.Clone(data),
+	})
+	return m.writeErr
 }
 
 func TestAccumulator_SingleNetwork(t *testing.T) {
@@ -198,6 +226,23 @@ func TestAccumulator_UnalignedMerge(t *testing.T) {
 	assert.Equal(t, netip.MustParsePrefix("10.0.0.2/31"), writer.rows[1].prefix)
 	assert.Equal(t, netip.MustParsePrefix("10.0.0.4/31"), writer.rows[2].prefix)
 	assert.Equal(t, netip.MustParsePrefix("10.0.0.6/32"), writer.rows[3].prefix)
+}
+
+func TestAccumulator_RangeWriterReceivesSingleRange(t *testing.T) {
+	writer := &mockRangeWriter{}
+	acc := NewAccumulator(writer)
+
+	data := map[string]any{"country": "CN"}
+
+	require.NoError(t, acc.Process(netip.MustParsePrefix("1.0.1.0/24"), data))
+	require.NoError(t, acc.Process(netip.MustParsePrefix("1.0.2.0/23"), data))
+	require.NoError(t, acc.Flush())
+
+	require.Len(t, writer.ranges, 1)
+	assert.Equal(t, netip.MustParseAddr("1.0.1.0"), writer.ranges[0].start)
+	assert.Equal(t, netip.MustParseAddr("1.0.3.255"), writer.ranges[0].end)
+	assert.Equal(t, data, writer.ranges[0].data)
+	require.Empty(t, writer.rows, "should not fall back to prefix rows")
 }
 
 func TestAccumulator_IPv6AdjacentMerging(t *testing.T) {

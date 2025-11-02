@@ -10,6 +10,8 @@ import (
 	"net/netip"
 	"strconv"
 
+	"go4.org/netipx"
+
 	"github.com/maxmind/mmdbconvert/internal/config"
 	"github.com/maxmind/mmdbconvert/internal/network"
 )
@@ -29,6 +31,7 @@ type CSVWriter struct {
 	config        *config.Config
 	headerWritten bool
 	headerEnabled bool
+	rangeCapable  bool
 }
 
 // NewCSVWriter creates a new CSV writer.
@@ -45,22 +48,29 @@ func NewCSVWriter(w io.Writer, cfg *config.Config) *CSVWriter {
 		headerEnabled = *cfg.Output.CSV.IncludeHeader
 	}
 
+	rangeCapable := true
+	for _, col := range cfg.Network.Columns {
+		switch col.Type {
+		case NetworkColumnStartIP, NetworkColumnEndIP, NetworkColumnStartInt, NetworkColumnEndInt:
+			// supported
+		default:
+			rangeCapable = false
+		}
+	}
+
 	return &CSVWriter{
 		writer:        csvWriter,
 		config:        cfg,
 		headerEnabled: headerEnabled,
 		headerWritten: !headerEnabled,
+		rangeCapable:  rangeCapable,
 	}
 }
 
 // WriteRow writes a single row with network prefix and column data.
 func (w *CSVWriter) WriteRow(prefix netip.Prefix, data map[string]any) error {
-	// Write header on first row
-	if w.headerEnabled && !w.headerWritten {
-		if err := w.writeHeader(); err != nil {
-			return fmt.Errorf("failed to write CSV header: %w", err)
-		}
-		w.headerWritten = true
+	if err := w.ensureHeader(); err != nil {
+		return err
 	}
 
 	// Build row with network columns + data columns
@@ -99,6 +109,46 @@ func (w *CSVWriter) Flush() error {
 	return nil
 }
 
+// WriteRange implements merger.RangeRowWriter, emitting a single row when the
+// configured network columns support ranges, or falling back to prefix output
+// otherwise.
+func (w *CSVWriter) WriteRange(start, end netip.Addr, data map[string]any) error {
+	if !w.rangeCapable {
+		cidrs := netipx.IPRangeFrom(start, end).Prefixes()
+		for _, cidr := range cidrs {
+			if err := w.WriteRow(cidr, data); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	if err := w.ensureHeader(); err != nil {
+		return err
+	}
+
+	row := make([]string, 0, len(w.config.Network.Columns)+len(w.config.Columns))
+
+	for _, netCol := range w.config.Network.Columns {
+		value, err := w.generateRangeNetworkValue(start, end, netCol.Type)
+		if err != nil {
+			return fmt.Errorf("failed to generate network column '%s': %w", netCol.Name, err)
+		}
+		row = append(row, value)
+	}
+
+	for _, col := range w.config.Columns {
+		value := data[col.Name]
+		strValue := convertToString(value)
+		row = append(row, strValue)
+	}
+
+	if err := w.writer.Write(row); err != nil {
+		return fmt.Errorf("failed to write CSV row: %w", err)
+	}
+
+	return nil
+}
+
 // writeHeader writes the CSV header row.
 func (w *CSVWriter) writeHeader() error {
 	header := make([]string, 0, len(w.config.Network.Columns)+len(w.config.Columns))
@@ -117,6 +167,16 @@ func (w *CSVWriter) writeHeader() error {
 		return fmt.Errorf("failed to write header: %w", err)
 	}
 
+	return nil
+}
+
+func (w *CSVWriter) ensureHeader() error {
+	if w.headerEnabled && !w.headerWritten {
+		if err := w.writeHeader(); err != nil {
+			return fmt.Errorf("failed to write CSV header: %w", err)
+		}
+		w.headerWritten = true
+	}
 	return nil
 }
 
@@ -153,6 +213,31 @@ func (w *CSVWriter) generateNetworkColumnValue(
 
 	default:
 		return "", fmt.Errorf("unknown network column type: %s", colType)
+	}
+}
+
+func (w *CSVWriter) generateRangeNetworkValue(
+	start netip.Addr,
+	end netip.Addr,
+	colType string,
+) (string, error) {
+	switch colType {
+	case NetworkColumnStartIP:
+		return start.String(), nil
+	case NetworkColumnEndIP:
+		return end.String(), nil
+	case NetworkColumnStartInt:
+		if start.Is4() {
+			return strconv.FormatUint(uint64(network.IPv4ToUint32(start)), 10), nil
+		}
+		return formatIPv6AsInt(start), nil
+	case NetworkColumnEndInt:
+		if end.Is4() {
+			return strconv.FormatUint(uint64(network.IPv4ToUint32(end)), 10), nil
+		}
+		return formatIPv6AsInt(end), nil
+	default:
+		return "", fmt.Errorf("unsupported network column type '%s' for range output", colType)
 	}
 }
 
