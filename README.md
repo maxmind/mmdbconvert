@@ -59,12 +59,12 @@ path = "/path/to/GeoIP2-City.mmdb"
 [[columns]]
 name = "country_code"
 database = "city"
-path = "/country/iso_code"
+path = ["country", "iso_code"]
 
 [[columns]]
 name = "city_name"
 database = "city"
-path = "/city/names/en"
+path = ["city", "names", "en"]
 ```
 
 ### 2. Run the Tool
@@ -130,7 +130,7 @@ path = "GeoIP2-City.mmdb"
 [[columns]]
 name = "country"
 database = "city"
-path = "/country/iso_code"
+path = ["country", "iso_code"]
 ```
 
 ### Parquet Output Example
@@ -160,13 +160,13 @@ path = "GeoIP2-City.mmdb"
 [[columns]]
 name = "country"
 database = "city"
-path = "/country/iso_code"
+path = ["country", "iso_code"]
 type = "string"
 
 [[columns]]
 name = "latitude"
 database = "city"
-path = "/location/latitude"
+path = ["location", "latitude"]
 type = "float64"
 ```
 
@@ -217,36 +217,36 @@ path = "GeoIP2-Anonymous-IP.mmdb"
 [[columns]]
 name = "country_code"
 database = "enterprise"
-path = "/country/iso_code"
+path = ["country", "iso_code"]
 
 [[columns]]
 name = "city_name"
 database = "enterprise"
-path = "/city/names/en"
+path = ["city", "names", "en"]
 
 [[columns]]
 name = "latitude"
 database = "enterprise"
-path = "/location/latitude"
+path = ["location", "latitude"]
 type = "float64"
 
 [[columns]]
 name = "longitude"
 database = "enterprise"
-path = "/location/longitude"
+path = ["location", "longitude"]
 type = "float64"
 
 # Columns from Anonymous IP database
 [[columns]]
 name = "is_anonymous"
 database = "anonymous"
-path = "/is_anonymous"
+path = ["is_anonymous"]
 type = "bool"
 
 [[columns]]
 name = "is_anonymous_vpn"
 database = "anonymous"
-path = "/is_anonymous_vpn"
+path = ["is_anonymous_vpn"]
 type = "bool"
 ```
 
@@ -285,25 +285,25 @@ Parquet supports native types for efficient storage and queries:
 [[columns]]
 name = "population"
 database = "city"
-path = "/city/population"
+path = ["city", "population"]
 type = "int64"          # Integer values
 
 [[columns]]
 name = "accuracy_radius"
 database = "city"
-path = "/location/accuracy_radius"
+path = ["location", "accuracy_radius"]
 type = "int64"
 
 [[columns]]
 name = "latitude"
 database = "city"
-path = "/location/latitude"
+path = ["location", "latitude"]
 type = "float64"        # Floating-point values
 
 [[columns]]
 name = "is_satellite"
 database = "city"
-path = "/traits/is_satellite_provider"
+path = ["traits", "is_satellite_provider"]
 type = "bool"           # Boolean values
 ```
 

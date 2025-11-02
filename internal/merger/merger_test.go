@@ -35,7 +35,7 @@ func TestMerger_SingleDatabase(t *testing.T) {
 			{
 				Name:     "country_code",
 				Database: "city",
-				Path:     "/country/iso_code",
+				Path:     config.Path{"country", "iso_code"},
 				Type:     "string",
 			},
 		},
@@ -92,13 +92,13 @@ func TestMerger_MultipleDatabases(t *testing.T) {
 			{
 				Name:     "country_code",
 				Database: "city",
-				Path:     "/country/iso_code",
+				Path:     config.Path{"country", "iso_code"},
 				Type:     "string",
 			},
 			{
 				Name:     "is_anonymous",
 				Database: "anon",
-				Path:     "/is_anonymous",
+				Path:     config.Path{"is_anonymous"},
 				Type:     "bool",
 			},
 		},
@@ -141,13 +141,13 @@ func TestMerger_EmitsNetworksPresentOnlyInLaterDatabase(t *testing.T) {
 			{
 				Name:     "domain",
 				Database: "domain",
-				Path:     "/domain",
+				Path:     config.Path{"domain"},
 				Type:     "string",
 			},
 			{
 				Name:     "country_code",
 				Database: "city",
-				Path:     "/country/iso_code",
+				Path:     config.Path{"country", "iso_code"},
 				Type:     "string",
 			},
 		},
@@ -183,7 +183,7 @@ func TestMerger_AdjacentNetworkMerging(t *testing.T) {
 			{
 				Name:     "value",
 				Database: "test",
-				Path:     "/",
+				Path:     config.Path{"value"},
 				Type:     "string",
 			},
 		},
@@ -229,7 +229,7 @@ func TestMerger_MissingDatabase(t *testing.T) {
 			{
 				Name:     "value",
 				Database: "nonexistent",
-				Path:     "/some/path",
+				Path:     config.Path{"some", "path"},
 				Type:     "string",
 			},
 		},
@@ -257,8 +257,8 @@ func TestMerger_MixedIPVersionsFails(t *testing.T) {
 
 	cfg := &config.Config{
 		Columns: []config.Column{
-			{Name: "v4", Database: "ipv4", Path: "/value"},
-			{Name: "v6", Database: "ipv6", Path: "/value"},
+			{Name: "v4", Database: "ipv4", Path: config.Path{"value"}},
+			{Name: "v6", Database: "ipv6", Path: config.Path{"value"}},
 		},
 	}
 
@@ -306,7 +306,7 @@ func TestMerger_NilValues(t *testing.T) {
 			{
 				Name:     "postal_code",
 				Database: "city",
-				Path:     "/postal/code",
+				Path:     config.Path{"postal", "code"},
 				Type:     "string",
 			},
 		},

@@ -20,7 +20,7 @@ path = "/path/to/GeoIP2-City.mmdb"
 [[columns]]
 name = "country_code"
 database = "geo"
-path = "/country/iso_code"
+path = ["country", "iso_code"]
 ```
 
 ## Configuration Sections
@@ -135,31 +135,31 @@ after network columns, in the order defined.
 [[columns]]
 name = "country_code"        # Output column name
 database = "enterprise"      # Database to read from (must match a database name)
-path = "/country/iso_code"   # JSON pointer path to the field
+path = ["country", "iso_code"]   # Path segments to the field
 ```
 
 #### Path Syntax
 
-Paths use JSON pointer syntax (RFC 6901):
+Paths are defined as TOML arrays. Each element represents one traversal step:
 
-- Start with `/`
-- Separate nested keys with `/`
-- Use array indices for arrays: `/subdivisions/0/iso_code`
+- Strings access map keys (e.g., `"country"`, `"names"`)
+- Integers access array indices (supports negative indices)
+- Strings are used verbatim, so keys may include `/` without escaping
 
 **Examples:**
 
 ```toml
 # Simple field
-path = "/country/iso_code"
+path = ["country", "iso_code"]
 
 # Nested object
-path = "/country/names/en"
+path = ["country", "names", "en"]
 
 # Array access
-path = "/subdivisions/0/names/en"
+path = ["subdivisions", 0, "names", "en"]
 
 # Deep nesting
-path = "/location/latitude"
+path = ["location", "latitude"]
 ```
 
 #### Data Types
@@ -175,7 +175,7 @@ path = "/location/latitude"
 [[columns]]
 name = "all_city_names"
 database = "geo"
-path = "/city/names"  # Outputs: {"en":"London","de":"Londres","es":"Londres"}
+path = ["city", "names"]  # Outputs: {"en":"London","de":"Londres","es":"Londres"}
 ```
 
 ## Complete Examples
@@ -203,73 +203,73 @@ path = "/var/lib/GeoIP/GeoIP2-Anonymous-IP.mmdb"
 [[columns]]
 name = "country_iso"
 database = "enterprise"
-path = "/country/iso_code"
+path = ["country", "iso_code"]
 
 [[columns]]
 name = "country_name"
 database = "enterprise"
-path = "/country/names/en"
+path = ["country", "names", "en"]
 
 [[columns]]
 name = "subdivision_iso"
 database = "enterprise"
-path = "/subdivisions/0/iso_code"
+path = ["subdivisions", 0, "iso_code"]
 
 [[columns]]
 name = "subdivision_name"
 database = "enterprise"
-path = "/subdivisions/0/names/en"
+path = ["subdivisions", 0, "names", "en"]
 
 [[columns]]
 name = "city_name"
 database = "enterprise"
-path = "/city/names/en"
+path = ["city", "names", "en"]
 
 [[columns]]
 name = "latitude"
 database = "enterprise"
-path = "/location/latitude"
+path = ["location", "latitude"]
 
 [[columns]]
 name = "longitude"
 database = "enterprise"
-path = "/location/longitude"
+path = ["location", "longitude"]
 
 [[columns]]
 name = "accuracy_radius"
 database = "enterprise"
-path = "/location/accuracy_radius"
+path = ["location", "accuracy_radius"]
 
 # GeoIP Anonymous IP fields
 [[columns]]
 name = "is_anonymous"
 database = "anonymous"
-path = "/is_anonymous"
+path = ["is_anonymous"]
 
 [[columns]]
 name = "is_anonymous_vpn"
 database = "anonymous"
-path = "/is_anonymous_vpn"
+path = ["is_anonymous_vpn"]
 
 [[columns]]
 name = "is_hosting_provider"
 database = "anonymous"
-path = "/is_hosting_provider"
+path = ["is_hosting_provider"]
 
 [[columns]]
 name = "is_public_proxy"
 database = "anonymous"
-path = "/is_public_proxy"
+path = ["is_public_proxy"]
 
 [[columns]]
 name = "is_tor_exit_node"
 database = "anonymous"
-path = "/is_tor_exit_node"
+path = ["is_tor_exit_node"]
 
 [[columns]]
 name = "is_residential_proxy"
 database = "anonymous"
-path = "/is_residential_proxy"
+path = ["is_residential_proxy"]
 ```
 
 ### Example 2: Parquet with IP Ranges
@@ -309,12 +309,12 @@ path = "GeoIP2-City.mmdb"
 [[columns]]
 name = "country"
 database = "city"
-path = "/country/iso_code"
+path = ["country", "iso_code"]
 
 [[columns]]
 name = "city"
 database = "city"
-path = "/city/names/en"
+path = ["city", "names", "en"]
 ```
 
 ### Example 3: Single Database with Complex Fields
@@ -331,24 +331,24 @@ path = "GeoIP2-Enterprise.mmdb"
 [[columns]]
 name = "country_code"
 database = "enterprise"
-path = "/country/iso_code"
+path = ["country", "iso_code"]
 
 # This will output all localized names as JSON
 [[columns]]
 name = "country_names_json"
 database = "enterprise"
-path = "/country/names"
+path = ["country", "names"]
 
 # Extract specific locales
 [[columns]]
 name = "country_name_en"
 database = "enterprise"
-path = "/country/names/en"
+path = ["country", "names", "en"]
 
 [[columns]]
 name = "country_name_de"
 database = "enterprise"
-path = "/country/names/de"
+path = ["country", "names", "de"]
 ```
 
 ## Network Merging Behavior

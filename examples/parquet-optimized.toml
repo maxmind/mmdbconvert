@@ -41,45 +41,45 @@ path = "/var/lib/GeoIP/GeoIP2-Enterprise.mmdb"
 [[columns]]
 name = "country_iso"
 database = "enterprise"
-path = "/country/iso_code"
+path = ["country", "iso_code"]
 type = "string"
 
 [[columns]]
 name = "country_name"
 database = "enterprise"
-path = "/country/names/en"
+path = ["country", "names", "en"]
 type = "string"
 
 [[columns]]
 name = "city_name"
 database = "enterprise"
-path = "/city/names/en"
+path = ["city", "names", "en"]
 type = "string"
 
 # Use native numeric types for better query performance and compression
 [[columns]]
 name = "latitude"
 database = "enterprise"
-path = "/location/latitude"
+path = ["location", "latitude"]
 type = "float64"
 
 [[columns]]
 name = "longitude"
 database = "enterprise"
-path = "/location/longitude"
+path = ["location", "longitude"]
 type = "float64"
 
 [[columns]]
 name = "accuracy_radius"
 database = "enterprise"
-path = "/location/accuracy_radius"
+path = ["location", "accuracy_radius"]
 type = "int64"
 
 # Boolean type for flags
 [[columns]]
 name = "is_in_european_union"
 database = "enterprise"
-path = "/country/is_in_european_union"
+path = ["country", "is_in_european_union"]
 type = "bool"
 
 # Query example for this optimized file:

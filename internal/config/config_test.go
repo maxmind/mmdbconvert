@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -29,7 +30,7 @@ path = "/path/to/geo.mmdb"
 [[columns]]
 name = "country"
 database = "geo"
-path = "/country/iso_code"
+path = ["country", "iso_code"]
 `,
 			validate: func(t *testing.T, cfg *Config) {
 				if cfg.Output.Format != "csv" {
@@ -64,6 +65,7 @@ path = "/country/iso_code"
 						cfg.Network.Columns[0].Type,
 					)
 				}
+				assertPathEquals(t, cfg.Columns[0].Path, "country", "iso_code")
 			},
 		},
 		{
@@ -81,7 +83,7 @@ path = "/path/to/geo.mmdb"
 [[columns]]
 name = "country"
 database = "geo"
-path = "/country/iso_code"
+path = ["country", "iso_code"]
 `,
 			validate: func(t *testing.T, cfg *Config) {
 				if cfg.Output.File != "" {
@@ -90,6 +92,7 @@ path = "/country/iso_code"
 				if cfg.Output.IPv4File != "v4.csv" || cfg.Output.IPv6File != "v6.csv" {
 					t.Error("missing per-version filenames")
 				}
+				assertPathEquals(t, cfg.Columns[0].Path, "country", "iso_code")
 			},
 		},
 		{
@@ -118,7 +121,7 @@ path = "/path/to/db1.mmdb"
 [[columns]]
 name = "field1"
 database = "db1"
-path = "/field1"
+path = ["field1"]
 type = "int64"
 `,
 			validate: func(t *testing.T, cfg *Config) {
@@ -140,6 +143,7 @@ type = "int64"
 				if cfg.Columns[0].Type != "int64" {
 					t.Errorf("expected column type=int64, got %s", cfg.Columns[0].Type)
 				}
+				assertPathEquals(t, cfg.Columns[0].Path, "field1")
 			},
 		},
 		{
@@ -160,12 +164,12 @@ path = "/path/to/anon.mmdb"
 [[columns]]
 name = "country"
 database = "geo"
-path = "/country/iso_code"
+path = ["country", "iso_code"]
 
 [[columns]]
 name = "is_anon"
 database = "anon"
-path = "/is_anonymous"
+path = ["is_anonymous"]
 `,
 			validate: func(t *testing.T, cfg *Config) {
 				if len(cfg.Databases) != 2 {
@@ -174,6 +178,8 @@ path = "/is_anonymous"
 				if len(cfg.Columns) != 2 {
 					t.Errorf("expected 2 columns, got %d", len(cfg.Columns))
 				}
+				assertPathEquals(t, cfg.Columns[0].Path, "country", "iso_code")
+				assertPathEquals(t, cfg.Columns[1].Path, "is_anonymous")
 			},
 		},
 		{
@@ -190,7 +196,7 @@ path = "/path/to/geo.mmdb"
 [[columns]]
 name = "country"
 database = "geo"
-path = "/country/iso_code"
+path = ["country", "iso_code"]
 `,
 			validate: func(t *testing.T, cfg *Config) {
 				// Parquet should default to start_int and end_int columns
@@ -214,6 +220,7 @@ path = "/country/iso_code"
 						)
 					}
 				}
+				assertPathEquals(t, cfg.Columns[0].Path, "country", "iso_code")
 			},
 		},
 	}
@@ -253,7 +260,7 @@ path = "/path/to/geo.mmdb"
 [[columns]]
 name = "country"
 database = "geo"
-path = "/country/iso_code"
+path = ["country", "iso_code"]
 `
 
 	tmp := t.TempDir()
@@ -279,7 +286,7 @@ path = "/path/to/geo.mmdb"
 [[columns]]
 name = "country"
 database = "geo"
-path = "/country/iso_code"
+path = ["country", "iso_code"]
 `
 
 	tmp := t.TempDir()
@@ -311,7 +318,7 @@ path = "/path/to/geo.mmdb"
 [[columns]]
 name = "country"
 database = "geo"
-path = "/country/iso_code"
+path = ["country", "iso_code"]
 `,
 			expectError: "output.format is required",
 		},
@@ -329,7 +336,7 @@ path = "/path/to/geo.mmdb"
 [[columns]]
 name = "country"
 database = "geo"
-path = "/country/iso_code"
+path = ["country", "iso_code"]
 `,
 			expectError: "output.format must be 'csv' or 'parquet'",
 		},
@@ -346,7 +353,7 @@ path = "/path/to/geo.mmdb"
 [[columns]]
 name = "country"
 database = "geo"
-path = "/country/iso_code"
+path = ["country", "iso_code"]
 `,
 			expectError: "either output.file must be set or both output.ipv4_file and output.ipv6_file must be provided",
 		},
@@ -360,7 +367,7 @@ file = "output.csv"
 [[columns]]
 name = "country"
 database = "geo"
-path = "/country/iso_code"
+path = ["country", "iso_code"]
 `,
 			expectError: "at least one database is required",
 		},
@@ -382,7 +389,7 @@ path = "/path/to/geo2.mmdb"
 [[columns]]
 name = "country"
 database = "geo"
-path = "/country/iso_code"
+path = ["country", "iso_code"]
 `,
 			expectError: "duplicate database name 'geo'",
 		},
@@ -399,7 +406,7 @@ path = "/path/to/geo.mmdb"
 [[columns]]
 name = "country"
 database = "geo"
-path = "/country/iso_code"
+path = ["country", "iso_code"]
 `,
 			expectError: "database name is required",
 		},
@@ -416,7 +423,7 @@ name = "geo"
 [[columns]]
 name = "country"
 database = "geo"
-path = "/country/iso_code"
+path = ["country", "iso_code"]
 `,
 			expectError: "database path is required",
 		},
@@ -434,7 +441,7 @@ path = "/path/to/geo.mmdb"
 [[columns]]
 name = "country"
 database = "unknown"
-path = "/country/iso_code"
+path = ["country", "iso_code"]
 `,
 			expectError: "references unknown database 'unknown'",
 		},
@@ -452,12 +459,12 @@ path = "/path/to/geo.mmdb"
 [[columns]]
 name = "country"
 database = "geo"
-path = "/country/iso_code"
+path = ["country", "iso_code"]
 
 [[columns]]
 name = "country"
 database = "geo"
-path = "/country/name"
+path = ["country", "name"]
 `,
 			expectError: "duplicate column name 'country'",
 		},
@@ -474,7 +481,7 @@ path = "/path/to/geo.mmdb"
 
 [[columns]]
 database = "geo"
-path = "/country/iso_code"
+path = ["country", "iso_code"]
 `,
 			expectError: "column name is required",
 		},
@@ -491,7 +498,7 @@ path = "/path/to/geo.mmdb"
 
 [[columns]]
 name = "country"
-path = "/country/iso_code"
+path = ["country", "iso_code"]
 `,
 			expectError: "column database is required",
 		},
@@ -530,7 +537,7 @@ path = "/path/to/geo.mmdb"
 [[columns]]
 name = "country"
 database = "geo"
-path = "/country/iso_code"
+path = ["country", "iso_code"]
 `,
 			expectError: "invalid network column type 'invalid'",
 		},
@@ -548,7 +555,7 @@ path = "/path/to/geo.mmdb"
 [[columns]]
 name = "country"
 database = "geo"
-path = "/country/iso_code"
+path = ["country", "iso_code"]
 type = "invalid"
 `,
 			expectError: "invalid type 'invalid' for column 'country'",
@@ -570,7 +577,7 @@ path = "/path/to/geo.mmdb"
 [[columns]]
 name = "country"
 database = "geo"
-path = "/country/iso_code"
+path = ["country", "iso_code"]
 `,
 			expectError: "invalid parquet compression 'invalid'",
 		},
@@ -596,7 +603,7 @@ path = "/path/to/geo.mmdb"
 [[columns]]
 name = "country"
 database = "geo"
-path = "/country/iso_code"
+path = ["country", "iso_code"]
 `,
 			expectError: "duplicate network column name 'network'",
 		},
@@ -618,7 +625,7 @@ path = "/path/to/geo.mmdb"
 [[columns]]
 name = "network"
 database = "geo"
-path = "/country/iso_code"
+path = ["country", "iso_code"]
 `,
 			expectError: "duplicate column name 'network' (already used as network column)",
 		},
@@ -750,5 +757,12 @@ func TestApplyDefaults(t *testing.T) {
 			applyDefaults(&cfg)
 			tt.validate(t, &cfg)
 		})
+	}
+}
+
+func assertPathEquals(t *testing.T, path Path, expected ...any) {
+	t.Helper()
+	if !reflect.DeepEqual(path.Segments(), expected) {
+		t.Fatalf("expected path %v, got %v", expected, path.Segments())
 	}
 }

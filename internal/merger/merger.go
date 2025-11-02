@@ -161,7 +161,7 @@ func (m *Merger) extractAndProcess(prefix netip.Prefix) error {
 		}
 
 		// Extract the value (this is the single decode per column)
-		value, err := mmdb.ExtractValue(reader, prefix, column.Path, column.Type)
+		value, err := mmdb.ExtractValue(reader, prefix, column.Path.Segments(), column.Type)
 		if err != nil {
 			return fmt.Errorf(
 				"failed to extract column '%s' for network %s: %w",

@@ -4,6 +4,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"math"
 	"os"
 
 	"github.com/pelletier/go-toml/v2"
@@ -60,8 +61,50 @@ type Database struct {
 type Column struct {
 	Name     string `toml:"name"`     // Output column name
 	Database string `toml:"database"` // Database to read from (references Database.Name)
-	Path     string `toml:"path"`     // JSON pointer path to field
+	Path     Path   `toml:"path"`     // Path segments to the field
 	Type     string `toml:"type"`     // Optional type hint: "string", "int64", "float64", "bool", "binary"
+}
+
+// Path represents the decoded path segments for MMDB lookup.
+type Path []any
+
+// UnmarshalTOML implements toml.Unmarshaler allowing mixed string/int arrays.
+func (p *Path) UnmarshalTOML(v any) error {
+	arr, ok := v.([]any)
+	if !ok {
+		return errors.New("path must be an array")
+	}
+	if len(arr) == 0 {
+		return errors.New("path array must not be empty")
+	}
+
+	segments := make([]any, len(arr))
+	for i, item := range arr {
+		switch val := item.(type) {
+		case string:
+			segments[i] = val
+		case int64:
+			if val > int64(math.MaxInt) || val < int64(math.MinInt) {
+				return fmt.Errorf("path index %d out of range", val)
+			}
+			segments[i] = int(val)
+		default:
+			return fmt.Errorf("path elements must be strings or integers, got %T", item)
+		}
+	}
+
+	*p = Path(segments)
+	return nil
+}
+
+// Segments returns a copy of the path segments suitable for DecodePath.
+func (p *Path) Segments() []any {
+	if p == nil || len(*p) == 0 {
+		return nil
+	}
+	segments := make([]any, len(*p))
+	copy(segments, *p)
+	return segments
 }
 
 // LoadConfig loads and parses a TOML configuration file.
@@ -220,7 +263,7 @@ func validate(config *Config) error {
 		if col.Database == "" {
 			return fmt.Errorf("column database is required for column '%s'", col.Name)
 		}
-		if col.Path == "" {
+		if len(col.Path) == 0 {
 			return fmt.Errorf("column path is required for column '%s'", col.Name)
 		}
 

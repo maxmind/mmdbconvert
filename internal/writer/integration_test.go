@@ -46,7 +46,7 @@ func TestEndToEnd_CSVExport(t *testing.T) {
 			{
 				Name:     "country_code",
 				Database: "city",
-				Path:     "/country/iso_code",
+				Path:     config.Path{"country", "iso_code"},
 				Type:     "string",
 			},
 		},
@@ -116,7 +116,7 @@ func TestEndToEnd_CSVExport_MultipleNetworkColumns(t *testing.T) {
 			{
 				Name:     "country_code",
 				Database: "city",
-				Path:     "/country/iso_code",
+				Path:     config.Path{"country", "iso_code"},
 				Type:     "string",
 			},
 		},
@@ -173,13 +173,13 @@ func TestEndToEnd_CSVExport_MultipleColumns(t *testing.T) {
 			{
 				Name:     "country_code",
 				Database: "city",
-				Path:     "/country/iso_code",
+				Path:     config.Path{"country", "iso_code"},
 				Type:     "string",
 			},
 			{
 				Name:     "city_name",
 				Database: "city",
-				Path:     "/city/names/en",
+				Path:     config.Path{"city", "names", "en"},
 				Type:     "string",
 			},
 		},
@@ -246,7 +246,7 @@ func TestEndToEnd_CSVExport_NilValues(t *testing.T) {
 			{
 				Name:     "postal_code",
 				Database: "city",
-				Path:     "/postal/code",
+				Path:     config.Path{"postal", "code"},
 				Type:     "string",
 			},
 		},

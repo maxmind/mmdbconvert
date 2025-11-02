@@ -7,53 +7,53 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestParsePath(t *testing.T) {
+func TestNormalizeSegments(t *testing.T) {
 	tests := []struct {
 		name     string
-		path     string
+		path     []any
 		expected []any
 		wantErr  bool
 	}{
 		{
-			name:     "empty path",
-			path:     "",
-			expected: []any{},
+			name:    "empty path",
+			path:    []any{},
+			wantErr: true,
 		},
 		{
 			name:     "simple path",
-			path:     "/country/iso_code",
+			path:     []any{"country", "iso_code"},
 			expected: []any{"country", "iso_code"},
 		},
 		{
 			name:     "array path with index",
-			path:     "/subdivisions/0/iso_code",
+			path:     []any{"subdivisions", int64(0), "iso_code"},
 			expected: []any{"subdivisions", 0, "iso_code"},
 		},
 		{
 			name:     "nested path",
-			path:     "/location/latitude",
+			path:     []any{"location", "latitude"},
 			expected: []any{"location", "latitude"},
 		},
 		{
 			name:     "negative array index",
-			path:     "/subdivisions/-1/names/en",
+			path:     []any{"subdivisions", int64(-1), "names", "en"},
 			expected: []any{"subdivisions", -1, "names", "en"},
 		},
 		{
 			name:     "multiple array indices",
-			path:     "/path/0/sub/1/value",
+			path:     []any{"path", int64(0), "sub", int64(1), "value"},
 			expected: []any{"path", 0, "sub", 1, "value"},
 		},
 		{
-			name:    "invalid - no leading slash",
-			path:    "country/iso_code",
+			name:    "invalid type",
+			path:    []any{1.23},
 			wantErr: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := parsePath(tt.path)
+			result, err := normalizeSegments(tt.path)
 			if tt.wantErr {
 				assert.Error(t, err)
 				return

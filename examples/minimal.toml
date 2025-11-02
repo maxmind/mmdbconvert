@@ -15,6 +15,6 @@ path = "/path/to/GeoIP2-City.mmdb"
 [[columns]]
 name = "country_code"
 database = "geo"
-path = "/country/iso_code"
+path = ["country", "iso_code"]
 
 # Note: Network column defaults to "network" with CIDR notation for CSV

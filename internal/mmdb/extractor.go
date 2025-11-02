@@ -10,22 +10,18 @@ import (
 )
 
 // ExtractValue extracts a value from an MMDB database for a given network and path.
-// The path uses a simplified JSON pointer syntax (e.g., "/country/iso_code" or
-// "/subdivisions/0/names/en").
-// Array indices can be negative (e.g., "/subdivisions/-1/names/en").
+// The path must be a slice of map keys (strings) and/or array indices (ints).
 // The typeHint specifies the desired output type (empty/"string", "int64", "float64", "bool",
-// "binary").
-// Returns nil if the path doesn't exist (not an error).
-// Returns error if type conversion fails or JSON encoding fails.
+// "binary"). Returns nil if the path doesn't exist (not an error).
 func ExtractValue(
 	reader *Reader,
 	network netip.Prefix,
-	path, typeHint string,
+	path []any,
+	typeHint string,
 ) (any, error) {
-	// Parse path into segments for DecodePath
-	segments, err := parsePath(path)
+	segments, err := normalizeSegments(path)
 	if err != nil {
-		return nil, fmt.Errorf("invalid path '%s': %w", path, err)
+		return nil, fmt.Errorf("invalid path %v: %w", path, err)
 	}
 
 	// Look up the network in the database
@@ -38,7 +34,7 @@ func ExtractValue(
 	// Decode once to any
 	var value any
 	if err := result.DecodePath(&value, segments...); err != nil {
-		return nil, fmt.Errorf("failed to decode path '%s': %w", path, err)
+		return nil, fmt.Errorf("failed to decode path %s: %w", describePath(segments), err)
 	}
 
 	if value == nil {
@@ -177,32 +173,52 @@ func convertToBinary(value any) (any, error) {
 	return nil, fmt.Errorf("cannot convert %T to binary", value)
 }
 
-// parsePath parses a path like "/country/iso_code" or "/subdivisions/0/names/en"
-// into segments suitable for DecodePath. Array indices are converted to integers.
-func parsePath(path string) ([]any, error) {
-	if path == "" {
-		return []any{}, nil
-	}
-	if !strings.HasPrefix(path, "/") {
-		return nil, errors.New("path must start with '/'")
+func normalizeSegments(path []any) ([]any, error) {
+	if len(path) == 0 {
+		return nil, errors.New("path must contain at least one segment")
 	}
 
-	// Split by '/' and skip the first empty element
-	parts := strings.Split(path[1:], "/")
-	if len(parts) == 0 {
-		return []any{}, nil
-	}
-
-	// Convert numeric strings to integers for array indices
-	segments := make([]any, len(parts))
-	for i, part := range parts {
-		// Try to parse as integer (for array indices)
-		if num, err := strconv.Atoi(part); err == nil {
-			segments[i] = num
-		} else {
-			segments[i] = part
+	segments := make([]any, len(path))
+	for i, seg := range path {
+		switch v := seg.(type) {
+		case string:
+			segments[i] = v
+		case int:
+			segments[i] = v
+		case int64:
+			if v > int64(int(^uint(0)>>1)) || v < int64(minInt()) {
+				return nil, fmt.Errorf("path index %d out of range", v)
+			}
+			segments[i] = int(v)
+		default:
+			return nil, fmt.Errorf("unsupported path segment type %T", seg)
 		}
 	}
 
 	return segments, nil
+}
+
+func describePath(segments []any) string {
+	var b strings.Builder
+	b.WriteString("[")
+	for i, seg := range segments {
+		if i > 0 {
+			b.WriteString(" ")
+		}
+		switch v := seg.(type) {
+		case string:
+			b.WriteString(v)
+		case int:
+			b.WriteString(strconv.Itoa(v))
+		default:
+			b.WriteString(fmt.Sprintf("%v", v))
+		}
+	}
+	b.WriteString("]")
+	return b.String()
+}
+
+func minInt() int {
+	n := ^uint(0) >> 1
+	return -int(n) - 1
 }
