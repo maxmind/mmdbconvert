@@ -200,6 +200,41 @@ func TestAccumulator_UnalignedMerge(t *testing.T) {
 	assert.Equal(t, netip.MustParsePrefix("10.0.0.6/32"), writer.rows[3].prefix)
 }
 
+func TestAccumulator_IPv6AdjacentMerging(t *testing.T) {
+	writer := &mockWriter{}
+	acc := NewAccumulator(writer)
+
+	data := map[string]any{"continent": "NA"}
+
+	err := acc.Process(netip.MustParsePrefix("2001:db8::/127"), data)
+	require.NoError(t, err)
+	err = acc.Process(netip.MustParsePrefix("2001:db8::2/127"), data)
+	require.NoError(t, err)
+
+	require.NoError(t, acc.Flush())
+
+	require.Len(t, writer.rows, 1)
+	assert.Equal(t, netip.MustParsePrefix("2001:db8::/126"), writer.rows[0].prefix)
+}
+
+func TestAccumulator_IPv6UnalignedRange(t *testing.T) {
+	writer := &mockWriter{}
+	acc := NewAccumulator(writer)
+
+	data := map[string]any{"continent": "EU"}
+
+	addresses := []string{"2001:db8::1/128", "2001:db8::2/128", "2001:db8::3/128"}
+	for _, cidr := range addresses {
+		require.NoError(t, acc.Process(netip.MustParsePrefix(cidr), data))
+	}
+
+	require.NoError(t, acc.Flush())
+
+	require.Len(t, writer.rows, 2)
+	assert.Equal(t, netip.MustParsePrefix("2001:db8::1/128"), writer.rows[0].prefix)
+	assert.Equal(t, netip.MustParsePrefix("2001:db8::2/127"), writer.rows[1].prefix)
+}
+
 func TestAccumulator_EmptyFlush(t *testing.T) {
 	writer := &mockWriter{}
 	acc := NewAccumulator(writer)
