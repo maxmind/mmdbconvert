@@ -89,6 +89,12 @@ network,country_code,city_name
 1.0.4.0/22,AU,Melbourne
 ```
 
+> **Note:** The `network` column appears automatically because no
+> `[[network.columns]]` sections were defined. By default, CSV output includes a
+> CIDR column named `network`, while Parquet output includes `start_int` and
+> `end_int` integer columns for faster IP lookups. You can customize network
+> columns in the configuration.
+
 ## Usage
 
 ```bash
@@ -325,6 +331,12 @@ type = "start_int"     # e.g., 3405803776 (IPv4 only)
 name = "end_int"
 type = "end_int"       # e.g., 3405804031 (IPv4 only)
 ```
+
+**Default network columns:** If you don't define any `[[network.columns]]`,
+mmdbconvert automatically provides sensible defaults based on output format:
+
+- **CSV**: Single `network` column (CIDR format) for human readability
+- **Parquet**: `start_int` and `end_int` columns for 10-100x faster IP queries
 
 **Note:** `start_int` and `end_int` only work with IPv4 addresses unless you
 split your output into separate IPv4/IPv6 files via `output.ipv4_file` and

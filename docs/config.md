@@ -122,8 +122,15 @@ type = "cidr"       # Output type
 - `start_int` - Starting IP as integer
 - `end_int` - Ending IP as integer
 
-**Default behavior:** If no `[[network.columns]]` sections are defined, a single
-CIDR column named "network" is output.
+**Default behavior:** If no `[[network.columns]]` sections are defined:
+
+- **CSV output**: A single CIDR column named `network` is generated
+- **Parquet output**: Two integer columns `start_int` and `end_int` are
+  generated for query-optimized IP lookups using predicate pushdown
+- **MMDB output**: No network columns (data is written by prefix)
+
+You can override these defaults by explicitly defining your own
+`[[network.columns]]` sections.
 
 > **Note:** Integer network columns (`start_int`, `end_int`) only work with IPv4
 > when writing to a single Parquet file. To use these columns with IPv6 data,
