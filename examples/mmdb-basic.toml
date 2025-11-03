@@ -1,0 +1,35 @@
+# Basic MMDB output example
+# This configuration merges databases and outputs to MMDB format with perfect type preservation.
+
+[output]
+format = "mmdb"
+file = "output.mmdb"
+
+[output.mmdb]
+database_type = "GeoIP2-City"
+description = { en = "Merged Database" }
+
+[[databases]]
+name = "city"
+path = "../testdata/MaxMind-DB/test-data/GeoIP2-City-Test.mmdb"
+
+[[columns]]
+name = "country_code"
+database = "city"
+path = ["country", "iso_code"]
+# Note: No type hint - preserves exact MMDB type
+
+[[columns]]
+name = "city_name"
+database = "city"
+path = ["city", "names", "en"]
+
+[[columns]]
+name = "latitude"
+database = "city"
+path = ["location", "latitude"]
+
+[[columns]]
+name = "longitude"
+database = "city"
+path = ["location", "longitude"]

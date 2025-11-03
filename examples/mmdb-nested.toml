@@ -1,0 +1,40 @@
+# MMDB output with nested structure example
+# This demonstrates using output_path to create nested MMDB structures.
+
+[output]
+format = "mmdb"
+file = "output-nested.mmdb"
+
+[output.mmdb]
+database_type = "GeoIP2-City"
+description = { en = "Nested Structure Example", de = "Beispiel für verschachtelte Strukturen" }
+# Languages are auto-populated from description keys if not specified
+# languages = ["en", "de"]
+
+[[databases]]
+name = "city"
+path = "../testdata/MaxMind-DB/test-data/GeoIP2-City-Test.mmdb"
+
+[[columns]]
+name = "country_code"  # Used for CSV/Parquet column name
+database = "city"
+path = ["country", "iso_code"]
+output_path = ["country", "iso_code"]  # Creates nested structure in MMDB
+
+[[columns]]
+name = "city_name"
+database = "city"
+path = ["city", "names", "en"]
+output_path = ["city", "names", "en"]
+
+[[columns]]
+name = "latitude"
+database = "city"
+path = ["location", "latitude"]
+output_path = ["location", "latitude"]
+
+[[columns]]
+name = "longitude"
+database = "city"
+path = ["location", "longitude"]
+output_path = ["location", "longitude"]

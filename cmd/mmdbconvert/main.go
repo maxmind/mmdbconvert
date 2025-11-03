@@ -1,7 +1,8 @@
-// mmdbconvert merges multiple MaxMind MMDB databases and exports to CSV or Parquet format.
+// mmdbconvert merges multiple MaxMind MMDB databases and exports to CSV, Parquet, or MMDB format.
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -111,7 +112,7 @@ func run(configPath string, quiet bool) error {
 	}
 	defer readers.Close()
 
-	rowWriter, closers, outputPaths, err := prepareRowWriter(cfg, quiet)
+	rowWriter, closers, outputPaths, err := prepareRowWriter(cfg, readers, quiet)
 	if err != nil {
 		return err
 	}
@@ -157,6 +158,7 @@ func run(configPath string, quiet bool) error {
 
 func prepareRowWriter(
 	cfg *config.Config,
+	readers *mmdb.Readers,
 	quiet bool,
 ) (merger.RowWriter, []io.Closer, []string, error) {
 	var (
@@ -284,6 +286,28 @@ func prepareRowWriter(
 			return nil, nil, nil, fmt.Errorf("failed to create Parquet writer: %w", err)
 		}
 		return parquetWriter, closers, outputPaths, nil
+
+	case "mmdb":
+		if !quiet {
+			fmt.Println()
+			fmt.Println("Creating output file...")
+		}
+
+		// Detect IP version from databases
+		ipVersion, err := detectIPVersionFromDatabases(cfg, readers)
+		if err != nil {
+			closeAll()
+			return nil, nil, nil, fmt.Errorf("detecting IP version: %w", err)
+		}
+
+		mmdbWriter, err := writer.NewMMDBWriter(cfg.Output.File, cfg, ipVersion)
+		if err != nil {
+			closeAll()
+			return nil, nil, nil, fmt.Errorf("creating MMDB writer: %w", err)
+		}
+
+		outputPaths = append(outputPaths, cfg.Output.File)
+		return mmdbWriter, closers, outputPaths, nil
 	}
 
 	closeAll()
@@ -297,6 +321,31 @@ func createOutputFile(path string) (*os.File, error) {
 		return nil, fmt.Errorf("failed to create %s: %w", path, err)
 	}
 	return file, nil
+}
+
+func detectIPVersionFromDatabases(cfg *config.Config, readers *mmdb.Readers) (int, error) {
+	// Get the first database from config to detect IP version
+	// In practice, all databases in the merge should have the same IP version
+	// due to validation in merger
+	if len(cfg.Databases) == 0 {
+		return 0, errors.New("no databases configured")
+	}
+
+	firstDB := cfg.Databases[0].Name
+	reader, ok := readers.Get(firstDB)
+	if !ok {
+		return 0, fmt.Errorf("database '%s' not found", firstDB)
+	}
+
+	metadata := reader.Metadata()
+	//nolint:gosec // IPVersion is always 4 or 6, no overflow risk
+	ipVersion := int(metadata.IPVersion)
+
+	if ipVersion != 4 && ipVersion != 6 {
+		return 0, fmt.Errorf("invalid IP version %d in database '%s'", ipVersion, firstDB)
+	}
+
+	return ipVersion, nil
 }
 
 func splitConfiguredPaths(base, ipv4Override, ipv6Override string) (ipv4, ipv6 string) {
@@ -325,7 +374,9 @@ func splitConfiguredPaths(base, ipv4Override, ipv6Override string) (ipv4, ipv6 s
 }
 
 func usage() {
-	fmt.Fprint(os.Stderr, `mmdbconvert - Merge MaxMind MMDB databases and export to CSV or Parquet
+	fmt.Fprint(
+		os.Stderr,
+		`mmdbconvert - Merge MaxMind MMDB databases and export to CSV, Parquet, or MMDB
 
 USAGE:
     mmdbconvert [OPTIONS] <config-file>

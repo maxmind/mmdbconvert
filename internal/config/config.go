@@ -6,8 +6,15 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"slices"
 
 	"github.com/pelletier/go-toml/v2"
+)
+
+const (
+	formatCSV     = "csv"
+	formatParquet = "parquet"
+	formatMMDB    = "mmdb"
 )
 
 // Config represents the complete configuration file structure.
@@ -20,10 +27,11 @@ type Config struct {
 
 // OutputConfig defines output file settings.
 type OutputConfig struct {
-	Format           string        `toml:"format"`  // "csv" or "parquet"
+	Format           string        `toml:"format"`  // "csv", "parquet", or "mmdb"
 	File             string        `toml:"file"`    // Output file path
 	CSV              CSVConfig     `toml:"csv"`     // CSV-specific options
 	Parquet          ParquetConfig `toml:"parquet"` // Parquet-specific options
+	MMDB             MMDBConfig    `toml:"mmdb"`    // MMDB-specific options
 	IPv4File         string        `toml:"ipv4_file"`
 	IPv6File         string        `toml:"ipv6_file"`
 	IncludeEmptyRows *bool         `toml:"include_empty_rows"` // Include rows with no MMDB data (default: false)
@@ -39,6 +47,15 @@ type CSVConfig struct {
 type ParquetConfig struct {
 	Compression  string `toml:"compression"`    // "none", "snappy", "gzip", "lz4", "zstd" (default: "snappy")
 	RowGroupSize int    `toml:"row_group_size"` // Rows per row group (default: 500000)
+}
+
+// MMDBConfig defines MMDB output options.
+type MMDBConfig struct {
+	DatabaseType            string            `toml:"database_type"`             // Database type (e.g., "GeoIP2-City")
+	Description             map[string]string `toml:"description"`               // Descriptions by language
+	Languages               []string          `toml:"languages"`                 // List of languages (auto-populated from description if empty)
+	RecordSize              *int              `toml:"record_size"`               // 24, 28, or 32 (default: 28)
+	IncludeReservedNetworks *bool             `toml:"include_reserved_networks"` // Include reserved networks (default: false)
 }
 
 // NetworkConfig defines network column configuration.
@@ -60,10 +77,11 @@ type Database struct {
 
 // Column defines a data column mapping from MMDB to output.
 type Column struct {
-	Name     string `toml:"name"`     // Output column name
-	Database string `toml:"database"` // Database to read from (references Database.Name)
-	Path     Path   `toml:"path"`     // Path segments to the field
-	Type     string `toml:"type"`     // Optional type hint: "string", "int64", "float64", "bool", "binary"
+	Name       string `toml:"name"`        // Output column name
+	Database   string `toml:"database"`    // Database to read from (references Database.Name)
+	Path       Path   `toml:"path"`        // Path segments to the field
+	OutputPath *Path  `toml:"output_path"` // Path segments for MMDB output (defaults to [name])
+	Type       string `toml:"type"`        // Optional type hint: "string", "int64", "float64", "bool", "binary" (Parquet only)
 }
 
 // Path represents the decoded path segments for MMDB lookup.
@@ -155,15 +173,37 @@ func applyDefaults(config *Config) {
 		config.Output.Parquet.RowGroupSize = 500000
 	}
 
+	// MMDB defaults
+	if config.Output.Format == formatMMDB {
+		if config.Output.MMDB.RecordSize == nil {
+			config.Output.MMDB.RecordSize = intPtr(28)
+		}
+		if config.Output.MMDB.IncludeReservedNetworks == nil {
+			config.Output.MMDB.IncludeReservedNetworks = boolPtr(false)
+		}
+		// Auto-populate languages from description keys if not specified
+		if len(config.Output.MMDB.Languages) == 0 {
+			for lang := range config.Output.MMDB.Description {
+				config.Output.MMDB.Languages = append(config.Output.MMDB.Languages, lang)
+			}
+			// Sort for deterministic output
+			slices.Sort(config.Output.MMDB.Languages)
+		}
+	}
+
 	// Network column defaults - apply format-specific defaults if no columns specified
 	if len(config.Network.Columns) == 0 {
-		if config.Output.Format == "parquet" {
+		switch config.Output.Format {
+		case formatParquet:
 			// Parquet default: integer columns for query performance
 			config.Network.Columns = []NetworkColumn{
 				{Name: "start_int", Type: "start_int"},
 				{Name: "end_int", Type: "end_int"},
 			}
-		} else {
+		case formatMMDB:
+			// MMDB default: no network columns (data written by prefix)
+			config.Network.Columns = []NetworkColumn{}
+		default:
 			// CSV default: human-readable CIDR
 			config.Network.Columns = []NetworkColumn{
 				{Name: "network", Type: "cidr"},
@@ -176,15 +216,22 @@ func boolPtr(v bool) *bool {
 	return &v
 }
 
+func intPtr(v int) *int {
+	return &v
+}
+
 // validate performs comprehensive validation of the configuration.
+//
+//nolint:gocyclo // Configuration validation is inherently complex
 func validate(config *Config) error {
 	// Validate output settings
 	if config.Output.Format == "" {
 		return errors.New("output.format is required")
 	}
-	if config.Output.Format != "csv" && config.Output.Format != "parquet" {
+	if config.Output.Format != formatCSV && config.Output.Format != formatParquet &&
+		config.Output.Format != formatMMDB {
 		return fmt.Errorf(
-			"output.format must be 'csv' or 'parquet', got '%s'",
+			"output.format must be 'csv', 'parquet', or 'mmdb', got '%s'",
 			config.Output.Format,
 		)
 	}
@@ -200,7 +247,7 @@ func validate(config *Config) error {
 	}
 
 	// Validate Parquet compression
-	if config.Output.Format == "parquet" {
+	if config.Output.Format == formatParquet {
 		validCompressions := map[string]bool{
 			"none": true, "snappy": true, "gzip": true, "lz4": true, "zstd": true,
 		}
@@ -209,6 +256,37 @@ func validate(config *Config) error {
 				"invalid parquet compression '%s', must be one of: none, snappy, gzip, lz4, zstd",
 				config.Output.Parquet.Compression,
 			)
+		}
+	}
+
+	// Validate MMDB configuration
+	if config.Output.Format == formatMMDB {
+		if config.Output.MMDB.DatabaseType == "" {
+			return errors.New("output.mmdb.database_type is required for MMDB output")
+		}
+
+		if config.Output.MMDB.RecordSize != nil {
+			rs := *config.Output.MMDB.RecordSize
+			if rs != 24 && rs != 28 && rs != 32 {
+				return fmt.Errorf("output.mmdb.record_size must be 24, 28, or 32, got %d", rs)
+			}
+		}
+
+		// Reject split files for MMDB
+		if config.Output.IPv4File != "" || config.Output.IPv6File != "" {
+			return errors.New("split IPv4/IPv6 files not supported for MMDB output")
+		}
+	}
+
+	// Validate type hints only allowed for Parquet
+	if config.Output.Format == formatCSV || config.Output.Format == formatMMDB {
+		for _, col := range config.Columns {
+			if col.Type != "" {
+				return fmt.Errorf(
+					"column '%s': type hints not supported for %s output (only for parquet)",
+					col.Name, config.Output.Format,
+				)
+			}
 		}
 	}
 
@@ -302,6 +380,11 @@ func validate(config *Config) error {
 			return fmt.Errorf("duplicate column name '%s'", col.Name)
 		}
 		dataColNames[col.Name] = true
+
+		// Validate output_path if set
+		if col.OutputPath != nil && len(*col.OutputPath) == 0 {
+			return fmt.Errorf("column '%s': output_path must not be empty", col.Name)
+		}
 	}
 
 	return nil

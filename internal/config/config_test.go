@@ -338,7 +338,7 @@ name = "country"
 database = "geo"
 path = ["country", "iso_code"]
 `,
-			expectError: "output.format must be 'csv' or 'parquet'",
+			expectError: "output.format must be 'csv', 'parquet', or 'mmdb'",
 		},
 		{
 			name: "missing output file",
@@ -558,7 +558,7 @@ database = "geo"
 path = ["country", "iso_code"]
 type = "invalid"
 `,
-			expectError: "invalid type 'invalid' for column 'country'",
+			expectError: "type hints not supported for csv output",
 		},
 		{
 			name: "invalid parquet compression",
