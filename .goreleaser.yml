@@ -16,10 +16,14 @@ builds:
     ignore:
       - goos: 'darwin'
         goarch: '386'
+      - goos: 'linux'
+        goarch: '386'
+      - goos: 'windows'
+        goarch: '386'
 
 archives:
   - id: 'mmdbconvert'
-    builds:
+    ids:
       - 'mmdbconvert'
     wrap_in_directory: true
     format_overrides:
@@ -45,7 +49,7 @@ changelog:
 
 nfpms:
   - id: 'mmdbconvert'
-    builds:
+    ids:
       - 'mmdbconvert'
     vendor: 'MaxMind, Inc.'
     homepage: 'https://www.maxmind.com/'
