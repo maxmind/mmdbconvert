@@ -3,26 +3,26 @@
 
 [output]
 format = "mmdb"
-file = "enterprise-with-anonymous.mmdb"
+file = "city-with-anonymous.mmdb"
 
 [output.mmdb]
-database_type = "GeoIP2-Enterprise"
-description = { en = "Enterprise + Anonymous IP Merged" }
+database_type = "GeoIP2-City"
+description = { en = "City + Anonymous IP Merged" }
 record_size = 28
 
 [[databases]]
-name = "enterprise"
-path = "../testdata/MaxMind-DB/test-data/GeoIP2-Enterprise-Test.mmdb"
+name = "city"
+path = "../testdata/MaxMind-DB/test-data/GeoIP2-City-Test.mmdb"
 
 [[databases]]
 name = "anonymous"
 path = "../testdata/MaxMind-DB/test-data/GeoIP2-Anonymous-IP-Test.mmdb"
 
-# Copy all Enterprise fields to root of output MMDB
+# Copy all City fields to root of output MMDB
 # This preserves the original structure: country, city, location, etc.
 [[columns]]
-name = "enterprise_all"
-database = "enterprise"
+name = "city_all"
+database = "city"
 path = []           # Copy entire record
 output_path = []    # Merge into root
 
