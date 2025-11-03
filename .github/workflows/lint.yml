@@ -1,44 +1,22 @@
-name: Lint
+name: golangci-lint
 
 on:
   push:
   pull_request:
+  schedule:
+    - cron: '5 5 * * SUN'
+
+permissions: {}
 
 jobs:
-  golangci-lint:
-    name: golangci-lint
+  golangci:
+    name: lint
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
-          submodules: recursive
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.25'
-
-      - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v6
+          persist-credentials: false
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@4afd733a84b1f43292c63897423277bb7f4313a9 # 8.0.0
         with:
           version: latest
-          args: --timeout=5m
-
-  markdown-lint:
-    name: Markdown Lint
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Install Prettier
-        run: npm install -g prettier
-
-      - name: Check Markdown formatting
-        run: prettier --check "**/*.md"
