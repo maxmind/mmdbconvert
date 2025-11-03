@@ -20,13 +20,23 @@ import (
 	"github.com/maxmind/mmdbconvert/internal/network"
 )
 
+// columnExtractor caches the reader and path segments for a column to avoid
+// per-row lookups and allocations.
+type columnExtractor struct {
+	reader   *mmdb.Reader // Pre-resolved reader for this column
+	path     []any        // Cached path segments (avoids per-row slice allocation)
+	name     string       // Column name for error messages
+	database string       // Database name for error messages
+}
+
 // Merger handles merging multiple MMDB databases into a single output stream.
 type Merger struct {
 	readers     *mmdb.Readers
 	config      *config.Config
 	acc         *Accumulator
-	readersList []*mmdb.Reader // Ordered list of readers for iteration
-	dbNamesList []string       // Corresponding database names
+	readersList []*mmdb.Reader    // Ordered list of readers for iteration
+	dbNamesList []string          // Corresponding database names
+	extractors  []columnExtractor // Pre-built extractors for each column
 	unmarshaler *mmdbtype.Unmarshaler
 }
 
@@ -37,10 +47,43 @@ func NewMerger(readers *mmdb.Readers, cfg *config.Config, writer RowWriter) *Mer
 		includeEmptyRows = *cfg.Output.IncludeEmptyRows
 	}
 
+	// Pre-build column extractors to avoid per-row lookups and allocations
+	extractors := make([]columnExtractor, len(cfg.Columns))
+	for i, column := range cfg.Columns {
+		reader, ok := readers.Get(column.Database)
+		if !ok {
+			// This shouldn't happen if validation passed, but handle gracefully
+			// The error will be caught during Merge() when we try to use it
+			extractors[i] = columnExtractor{
+				reader:   nil,
+				path:     nil,
+				name:     column.Name,
+				database: column.Database,
+			}
+			continue
+		}
+
+		// Cache the path segments - this avoids the per-row allocation
+		// that column.Path.Segments() would cause
+		var pathSegments []any
+		if len(column.Path) > 0 {
+			pathSegments = make([]any, len(column.Path))
+			copy(pathSegments, column.Path)
+		}
+
+		extractors[i] = columnExtractor{
+			reader:   reader,
+			path:     pathSegments,
+			name:     column.Name,
+			database: column.Database,
+		}
+	}
+
 	return &Merger{
 		readers:     readers,
 		config:      cfg,
 		acc:         NewAccumulator(writer, includeEmptyRows),
+		extractors:  extractors,
 		unmarshaler: mmdbtype.NewUnmarshaler(),
 	}
 }
@@ -156,24 +199,23 @@ func (m *Merger) processNetwork(currentNetwork netip.Prefix, dbIndex int) error 
 func (m *Merger) extractAndProcess(prefix netip.Prefix) error {
 	data := map[string]any{}
 
-	// Extract values for all columns from all databases
-	for _, column := range m.config.Columns {
-		// Find the reader for this column's database
-		reader, ok := m.readers.Get(column.Database)
-		if !ok {
+	// Extract values for all columns using cached extractors
+	for _, extractor := range m.extractors {
+		// Check if reader was resolved during initialization
+		if extractor.reader == nil {
 			return fmt.Errorf(
 				"database '%s' not found for column '%s'",
-				column.Database,
-				column.Name,
+				extractor.database,
+				extractor.name,
 			)
 		}
 
-		// Extract the value as mmdbtype.DataType
-		value, err := mmdb.ExtractValue(reader, prefix, column.Path.Segments(), m.unmarshaler)
+		// Extract the value using the cached reader and path
+		value, err := mmdb.ExtractValue(extractor.reader, prefix, extractor.path, m.unmarshaler)
 		if err != nil {
 			return fmt.Errorf(
 				"extracting column '%s' for network %s: %w",
-				column.Name,
+				extractor.name,
 				prefix,
 				err,
 			)
@@ -181,7 +223,7 @@ func (m *Merger) extractAndProcess(prefix netip.Prefix) error {
 
 		// Only add non-nil values to reduce allocations and simplify empty detection
 		if value != nil {
-			data[column.Name] = value
+			data[extractor.name] = value
 		}
 	}
 
