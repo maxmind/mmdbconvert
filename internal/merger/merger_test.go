@@ -19,6 +19,10 @@ const (
 	ipv4TestDB  = testDataDir + "/MaxMind-DB-test-ipv4-24.mmdb"
 )
 
+func boolPtr(v bool) *bool {
+	return &v
+}
+
 func TestMerger_SingleDatabase(t *testing.T) {
 	// Open test database
 	databases := map[string]string{
@@ -115,10 +119,9 @@ func TestMerger_MultipleDatabases(t *testing.T) {
 	// Should have written some rows
 	assert.NotEmpty(t, writer.rows, "should write at least one row")
 
-	// Verify each row has both columns
+	// Verify each row has at least one column (rows with all nil values are skipped by default)
 	for _, row := range writer.rows {
-		assert.Contains(t, row.data, "country_code")
-		assert.Contains(t, row.data, "is_anonymous")
+		assert.NotEmpty(t, row.data, "each row should have at least one non-nil value")
 	}
 }
 
@@ -179,6 +182,9 @@ func TestMerger_AdjacentNetworkMerging(t *testing.T) {
 
 	// Create config
 	cfg := &config.Config{
+		Output: config.OutputConfig{
+			IncludeEmptyRows: boolPtr(true), // Include networks even if they have no data
+		},
 		Columns: []config.Column{
 			{
 				Name:     "value",

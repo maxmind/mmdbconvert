@@ -35,7 +35,16 @@ format = "csv"    # Output format: "csv" or "parquet"
 file = "output.csv"  # Output file path (use this for a combined file)
 # ipv4_file = "output_ipv4.csv"  # Optional IPv4-only file (set both ipv4_file and ipv6_file, omit file)
 # ipv6_file = "output_ipv6.csv"  # Optional IPv6-only file (set both ipv4_file and ipv6_file, omit file)
+include_empty_rows = false  # Include rows with no MMDB data (default: false)
 ```
+
+**Data Filtering:**
+
+- `include_empty_rows` - Controls whether rows with no MMDB data are written to
+  the output. When `false` (default), rows where all data columns are empty/null
+  are skipped. When `true`, all network ranges are included even if they have no
+  associated data. Network columns (CIDR, start_ip, etc.) are always present and
+  don't affect this filtering.
 
 #### CSV Options
 

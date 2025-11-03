@@ -31,14 +31,16 @@ type RangeRowWriter interface {
 // Accumulator accumulates adjacent networks with identical data and flushes
 // them as CIDRs when data changes. This enables O(1) memory usage.
 type Accumulator struct {
-	current *AccumulatedRange
-	writer  RowWriter
+	current          *AccumulatedRange
+	writer           RowWriter
+	includeEmptyRows bool
 }
 
 // NewAccumulator creates a new streaming accumulator.
-func NewAccumulator(writer RowWriter) *Accumulator {
+func NewAccumulator(writer RowWriter, includeEmptyRows bool) *Accumulator {
 	return &Accumulator{
-		writer: writer,
+		writer:           writer,
+		includeEmptyRows: includeEmptyRows,
 	}
 }
 
@@ -46,6 +48,11 @@ func NewAccumulator(writer RowWriter) *Accumulator {
 // to the current accumulated range and has identical data, it extends the range.
 // Otherwise, it flushes the current range and starts a new accumulation.
 func (a *Accumulator) Process(prefix netip.Prefix, data map[string]any) error {
+	// Skip rows with no data if includeEmptyRows is false (default)
+	if !a.includeEmptyRows && len(data) == 0 {
+		return nil
+	}
+
 	addr := prefix.Addr()
 	endIP := network.CalculateEndIP(prefix)
 

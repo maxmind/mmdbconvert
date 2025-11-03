@@ -20,12 +20,13 @@ type Config struct {
 
 // OutputConfig defines output file settings.
 type OutputConfig struct {
-	Format   string        `toml:"format"`  // "csv" or "parquet"
-	File     string        `toml:"file"`    // Output file path
-	CSV      CSVConfig     `toml:"csv"`     // CSV-specific options
-	Parquet  ParquetConfig `toml:"parquet"` // Parquet-specific options
-	IPv4File string        `toml:"ipv4_file"`
-	IPv6File string        `toml:"ipv6_file"`
+	Format           string        `toml:"format"`  // "csv" or "parquet"
+	File             string        `toml:"file"`    // Output file path
+	CSV              CSVConfig     `toml:"csv"`     // CSV-specific options
+	Parquet          ParquetConfig `toml:"parquet"` // Parquet-specific options
+	IPv4File         string        `toml:"ipv4_file"`
+	IPv6File         string        `toml:"ipv6_file"`
+	IncludeEmptyRows *bool         `toml:"include_empty_rows"` // Include rows with no MMDB data (default: false)
 }
 
 // CSVConfig defines CSV output options.
@@ -133,6 +134,11 @@ func LoadConfig(path string) (*Config, error) {
 
 // applyDefaults applies default values to configuration.
 func applyDefaults(config *Config) {
+	// Output defaults
+	if config.Output.IncludeEmptyRows == nil {
+		config.Output.IncludeEmptyRows = boolPtr(false)
+	}
+
 	// CSV defaults
 	if config.Output.CSV.Delimiter == "" {
 		config.Output.CSV.Delimiter = ","

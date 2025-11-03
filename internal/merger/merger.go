@@ -30,10 +30,15 @@ type Merger struct {
 
 // NewMerger creates a new merger instance.
 func NewMerger(readers *mmdb.Readers, cfg *config.Config, writer RowWriter) *Merger {
+	includeEmptyRows := false
+	if cfg.Output.IncludeEmptyRows != nil {
+		includeEmptyRows = *cfg.Output.IncludeEmptyRows
+	}
+
 	return &Merger{
 		readers: readers,
 		config:  cfg,
-		acc:     NewAccumulator(writer),
+		acc:     NewAccumulator(writer, includeEmptyRows),
 	}
 }
 
@@ -171,8 +176,10 @@ func (m *Merger) extractAndProcess(prefix netip.Prefix) error {
 			)
 		}
 
-		// Store in data map (nil values are valid - they represent missing data)
-		data[column.Name] = value
+		// Only add non-nil values to reduce allocations and simplify empty detection
+		if value != nil {
+			data[column.Name] = value
+		}
 	}
 
 	// Feed to accumulator

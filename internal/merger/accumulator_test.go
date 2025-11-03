@@ -65,7 +65,7 @@ func (m *mockRangeWriter) WriteRange(start, end netip.Addr, data map[string]any)
 
 func TestAccumulator_SingleNetwork(t *testing.T) {
 	writer := &mockWriter{}
-	acc := NewAccumulator(writer)
+	acc := NewAccumulator(writer, true)
 
 	// Process single network
 	prefix := netip.MustParsePrefix("10.0.0.0/24")
@@ -86,7 +86,7 @@ func TestAccumulator_SingleNetwork(t *testing.T) {
 
 func TestAccumulator_AdjacentNetworksWithSameData(t *testing.T) {
 	writer := &mockWriter{}
-	acc := NewAccumulator(writer)
+	acc := NewAccumulator(writer, true)
 
 	// Process two adjacent /25 networks with same data
 	data := map[string]any{"country": "US"}
@@ -109,7 +109,7 @@ func TestAccumulator_AdjacentNetworksWithSameData(t *testing.T) {
 
 func TestAccumulator_AdjacentNetworksWithDifferentData(t *testing.T) {
 	writer := &mockWriter{}
-	acc := NewAccumulator(writer)
+	acc := NewAccumulator(writer, true)
 
 	// Process two adjacent networks with different data
 	err := acc.Process(
@@ -138,7 +138,7 @@ func TestAccumulator_AdjacentNetworksWithDifferentData(t *testing.T) {
 
 func TestAccumulator_NonAdjacentNetworks(t *testing.T) {
 	writer := &mockWriter{}
-	acc := NewAccumulator(writer)
+	acc := NewAccumulator(writer, true)
 
 	// Process two non-adjacent networks with same data
 	data := map[string]any{"country": "US"}
@@ -162,7 +162,7 @@ func TestAccumulator_NonAdjacentNetworks(t *testing.T) {
 
 func TestAccumulator_MultipleAdjacentMerges(t *testing.T) {
 	writer := &mockWriter{}
-	acc := NewAccumulator(writer)
+	acc := NewAccumulator(writer, true)
 
 	// Process four adjacent /26 networks with same data
 	data := map[string]any{"country": "US"}
@@ -190,7 +190,7 @@ func TestAccumulator_MultipleAdjacentMerges(t *testing.T) {
 
 func TestAccumulator_UnalignedMerge(t *testing.T) {
 	writer := &mockWriter{}
-	acc := NewAccumulator(writer)
+	acc := NewAccumulator(writer, true)
 
 	// Process networks that merge into an unaligned range
 	data := map[string]any{"country": "US"}
@@ -230,7 +230,7 @@ func TestAccumulator_UnalignedMerge(t *testing.T) {
 
 func TestAccumulator_RangeWriterReceivesSingleRange(t *testing.T) {
 	writer := &mockRangeWriter{}
-	acc := NewAccumulator(writer)
+	acc := NewAccumulator(writer, true)
 
 	data := map[string]any{"country": "CN"}
 
@@ -247,7 +247,7 @@ func TestAccumulator_RangeWriterReceivesSingleRange(t *testing.T) {
 
 func TestAccumulator_IPv6AdjacentMerging(t *testing.T) {
 	writer := &mockWriter{}
-	acc := NewAccumulator(writer)
+	acc := NewAccumulator(writer, true)
 
 	data := map[string]any{"continent": "NA"}
 
@@ -264,7 +264,7 @@ func TestAccumulator_IPv6AdjacentMerging(t *testing.T) {
 
 func TestAccumulator_IPv6UnalignedRange(t *testing.T) {
 	writer := &mockWriter{}
-	acc := NewAccumulator(writer)
+	acc := NewAccumulator(writer, true)
 
 	data := map[string]any{"continent": "EU"}
 
@@ -282,7 +282,7 @@ func TestAccumulator_IPv6UnalignedRange(t *testing.T) {
 
 func TestAccumulator_EmptyFlush(t *testing.T) {
 	writer := &mockWriter{}
-	acc := NewAccumulator(writer)
+	acc := NewAccumulator(writer, true)
 
 	// Flush without processing anything
 	err := acc.Flush()
@@ -294,7 +294,7 @@ func TestAccumulator_EmptyFlush(t *testing.T) {
 
 func TestAccumulator_MultipleFlushes(t *testing.T) {
 	writer := &mockWriter{}
-	acc := NewAccumulator(writer)
+	acc := NewAccumulator(writer, true)
 
 	// First batch
 	err := acc.Process(netip.MustParsePrefix("10.0.0.0/24"), map[string]any{"country": "US"})
@@ -318,7 +318,7 @@ func TestAccumulator_MultipleFlushes(t *testing.T) {
 
 func TestAccumulator_IPv6(t *testing.T) {
 	writer := &mockWriter{}
-	acc := NewAccumulator(writer)
+	acc := NewAccumulator(writer, true)
 
 	// Process adjacent IPv6 networks
 	data := map[string]any{"country": "US"}
@@ -336,6 +336,105 @@ func TestAccumulator_IPv6(t *testing.T) {
 	// Should merge into /126
 	require.Len(t, writer.rows, 1)
 	assert.Equal(t, netip.MustParsePrefix("2001:db8::/126"), writer.rows[0].prefix)
+}
+
+func TestAccumulator_SkipEmptyRows(t *testing.T) {
+	writer := &mockWriter{}
+	acc := NewAccumulator(writer, false) // Don't include empty rows
+
+	// Process a network with data
+	err := acc.Process(
+		netip.MustParsePrefix("10.0.0.0/24"),
+		map[string]any{"country": "US"},
+	)
+	require.NoError(t, err)
+
+	// Process a network with empty data (should be skipped)
+	err = acc.Process(
+		netip.MustParsePrefix("10.0.1.0/24"),
+		map[string]any{},
+	)
+	require.NoError(t, err)
+
+	// Process another network with data
+	err = acc.Process(
+		netip.MustParsePrefix("10.0.2.0/24"),
+		map[string]any{"country": "CA"},
+	)
+	require.NoError(t, err)
+
+	// Flush
+	err = acc.Flush()
+	require.NoError(t, err)
+
+	// Should only have 2 rows (the one with empty data was skipped)
+	require.Len(t, writer.rows, 2)
+	assert.Equal(t, netip.MustParsePrefix("10.0.0.0/24"), writer.rows[0].prefix)
+	assert.Equal(t, map[string]any{"country": "US"}, writer.rows[0].data)
+	assert.Equal(t, netip.MustParsePrefix("10.0.2.0/24"), writer.rows[1].prefix)
+	assert.Equal(t, map[string]any{"country": "CA"}, writer.rows[1].data)
+}
+
+func TestAccumulator_IncludeEmptyRows(t *testing.T) {
+	writer := &mockWriter{}
+	acc := NewAccumulator(writer, true) // Include empty rows
+
+	// Process a network with data
+	err := acc.Process(
+		netip.MustParsePrefix("10.0.0.0/24"),
+		map[string]any{"country": "US"},
+	)
+	require.NoError(t, err)
+
+	// Process a network with empty data (should be included)
+	err = acc.Process(
+		netip.MustParsePrefix("10.0.1.0/24"),
+		map[string]any{},
+	)
+	require.NoError(t, err)
+
+	// Process another network with data
+	err = acc.Process(
+		netip.MustParsePrefix("10.0.2.0/24"),
+		map[string]any{"country": "CA"},
+	)
+	require.NoError(t, err)
+
+	// Flush
+	err = acc.Flush()
+	require.NoError(t, err)
+
+	// Should have all 3 rows (including the one with empty data)
+	require.Len(t, writer.rows, 3)
+	assert.Equal(t, netip.MustParsePrefix("10.0.0.0/24"), writer.rows[0].prefix)
+	assert.Equal(t, map[string]any{"country": "US"}, writer.rows[0].data)
+	assert.Equal(t, netip.MustParsePrefix("10.0.1.0/24"), writer.rows[1].prefix)
+	assert.Equal(t, map[string]any{}, writer.rows[1].data)
+	assert.Equal(t, netip.MustParsePrefix("10.0.2.0/24"), writer.rows[2].prefix)
+	assert.Equal(t, map[string]any{"country": "CA"}, writer.rows[2].data)
+}
+
+func TestAccumulator_SkipEmptyDoesNotAffectMerging(t *testing.T) {
+	writer := &mockWriter{}
+	acc := NewAccumulator(writer, false) // Don't include empty rows
+
+	// Process three adjacent networks with empty data
+	// These would normally merge, but since they're all empty, they should all be skipped
+	err := acc.Process(netip.MustParsePrefix("10.0.0.0/26"), map[string]any{})
+	require.NoError(t, err)
+
+	err = acc.Process(netip.MustParsePrefix("10.0.0.64/26"), map[string]any{})
+	require.NoError(t, err)
+
+	err = acc.Process(netip.MustParsePrefix("10.0.0.128/26"), map[string]any{})
+	require.NoError(t, err)
+
+	// Flush
+	err = acc.Flush()
+	require.NoError(t, err)
+
+	// Should have no rows (all were empty and skipped)
+	assert.Empty(t, writer.rows)
 }
 
 func TestDataEquals(t *testing.T) {
