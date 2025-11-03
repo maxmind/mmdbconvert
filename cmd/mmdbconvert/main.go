@@ -77,7 +77,7 @@ func run(configPath string, quiet bool) error {
 	// Load configuration
 	cfg, err := config.LoadConfig(configPath)
 	if err != nil {
-		return fmt.Errorf("failed to load config: %w", err)
+		return fmt.Errorf("loading config: %w", err)
 	}
 
 	if !quiet {
@@ -108,7 +108,7 @@ func run(configPath string, quiet bool) error {
 
 	readers, err := mmdb.OpenDatabases(databases)
 	if err != nil {
-		return fmt.Errorf("failed to open databases: %w", err)
+		return fmt.Errorf("opening databases: %w", err)
 	}
 	defer readers.Close()
 
@@ -129,13 +129,13 @@ func run(configPath string, quiet bool) error {
 	// Create merger and run
 	m := merger.NewMerger(readers, cfg, rowWriter)
 	if err := m.Merge(); err != nil {
-		return fmt.Errorf("merge failed: %w", err)
+		return fmt.Errorf("merging databases: %w", err)
 	}
 
 	// Flush writer
 	if flusher, ok := rowWriter.(interface{ Flush() error }); ok {
 		if err := flusher.Flush(); err != nil {
-			return fmt.Errorf("failed to flush output: %w", err)
+			return fmt.Errorf("flushing output: %w", err)
 		}
 	}
 
@@ -187,7 +187,7 @@ func prepareRowWriter(
 			ipv4File, err := createOutputFile(ipv4Path)
 			if err != nil {
 				closeAll()
-				return nil, nil, nil, fmt.Errorf("failed to create IPv4 output file: %w", err)
+				return nil, nil, nil, fmt.Errorf("creating IPv4 output file: %w", err)
 			}
 			closers = append(closers, ipv4File)
 			outputPaths = append(outputPaths, ipv4Path)
@@ -195,7 +195,7 @@ func prepareRowWriter(
 			ipv6File, err := createOutputFile(ipv6Path)
 			if err != nil {
 				closeAll()
-				return nil, nil, nil, fmt.Errorf("failed to create IPv6 output file: %w", err)
+				return nil, nil, nil, fmt.Errorf("creating IPv6 output file: %w", err)
 			}
 			closers = append(closers, ipv6File)
 			outputPaths = append(outputPaths, ipv6Path)
@@ -213,7 +213,7 @@ func prepareRowWriter(
 		outputFile, err := createOutputFile(cfg.Output.File)
 		if err != nil {
 			closeAll()
-			return nil, nil, nil, fmt.Errorf("failed to create output file: %w", err)
+			return nil, nil, nil, fmt.Errorf("creating output file: %w", err)
 		}
 		closers = append(closers, outputFile)
 		outputPaths = append(outputPaths, cfg.Output.File)
@@ -234,7 +234,7 @@ func prepareRowWriter(
 			ipv4File, err := createOutputFile(ipv4Path)
 			if err != nil {
 				closeAll()
-				return nil, nil, nil, fmt.Errorf("failed to create IPv4 output file: %w", err)
+				return nil, nil, nil, fmt.Errorf("creating IPv4 output file: %w", err)
 			}
 			closers = append(closers, ipv4File)
 			outputPaths = append(outputPaths, ipv4Path)
@@ -242,7 +242,7 @@ func prepareRowWriter(
 			ipv6File, err := createOutputFile(ipv6Path)
 			if err != nil {
 				closeAll()
-				return nil, nil, nil, fmt.Errorf("failed to create IPv6 output file: %w", err)
+				return nil, nil, nil, fmt.Errorf("creating IPv6 output file: %w", err)
 			}
 			closers = append(closers, ipv6File)
 			outputPaths = append(outputPaths, ipv6Path)
@@ -254,7 +254,7 @@ func prepareRowWriter(
 			)
 			if err != nil {
 				closeAll()
-				return nil, nil, nil, fmt.Errorf("failed to create IPv4 Parquet writer: %w", err)
+				return nil, nil, nil, fmt.Errorf("creating IPv4 Parquet writer: %w", err)
 			}
 			ipv6Writer, err := writer.NewParquetWriterWithIPVersion(
 				ipv6File,
@@ -263,7 +263,7 @@ func prepareRowWriter(
 			)
 			if err != nil {
 				closeAll()
-				return nil, nil, nil, fmt.Errorf("failed to create IPv6 Parquet writer: %w", err)
+				return nil, nil, nil, fmt.Errorf("creating IPv6 Parquet writer: %w", err)
 			}
 			return writer.NewSplitRowWriter(ipv4Writer, ipv6Writer), closers, outputPaths, nil
 		}
@@ -275,7 +275,7 @@ func prepareRowWriter(
 		outputFile, err := createOutputFile(cfg.Output.File)
 		if err != nil {
 			closeAll()
-			return nil, nil, nil, fmt.Errorf("failed to create output file: %w", err)
+			return nil, nil, nil, fmt.Errorf("creating output file: %w", err)
 		}
 		closers = append(closers, outputFile)
 		outputPaths = append(outputPaths, cfg.Output.File)
@@ -283,7 +283,7 @@ func prepareRowWriter(
 		parquetWriter, err := writer.NewParquetWriter(outputFile, cfg)
 		if err != nil {
 			closeAll()
-			return nil, nil, nil, fmt.Errorf("failed to create Parquet writer: %w", err)
+			return nil, nil, nil, fmt.Errorf("creating Parquet writer: %w", err)
 		}
 		return parquetWriter, closers, outputPaths, nil
 
@@ -318,7 +318,7 @@ func createOutputFile(path string) (*os.File, error) {
 	// #nosec G304 -- paths come from trusted configuration
 	file, err := os.Create(path)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create %s: %w", path, err)
+		return nil, fmt.Errorf("creating %s: %w", path, err)
 	}
 	return file, nil
 }

@@ -19,7 +19,7 @@ type Reader struct {
 func Open(path string) (*Reader, error) {
 	reader, err := maxminddb.Open(path)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open MMDB file '%s': %w", path, err)
+		return nil, fmt.Errorf("opening MMDB file '%s': %w", path, err)
 	}
 
 	return &Reader{
@@ -31,7 +31,7 @@ func Open(path string) (*Reader, error) {
 // Close closes the MMDB database.
 func (r *Reader) Close() error {
 	if err := r.reader.Close(); err != nil {
-		return fmt.Errorf("failed to close MMDB reader: %w", err)
+		return fmt.Errorf("closing MMDB reader: %w", err)
 	}
 	return nil
 }

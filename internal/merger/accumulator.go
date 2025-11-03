@@ -100,7 +100,7 @@ func (a *Accumulator) Flush() error {
 	if rangeWriter, ok := a.writer.(RangeRowWriter); ok {
 		if err := rangeWriter.WriteRange(a.current.StartIP, a.current.EndIP, a.current.Data); err != nil {
 			return fmt.Errorf(
-				"failed to write range %s-%s: %w",
+				"writing range %s-%s: %w",
 				a.current.StartIP,
 				a.current.EndIP,
 				err,
@@ -116,7 +116,7 @@ func (a *Accumulator) Flush() error {
 	// Write each CIDR as a separate row
 	for _, cidr := range cidrs {
 		if err := a.writer.WriteRow(cidr, a.current.Data); err != nil {
-			return fmt.Errorf("failed to write row for %s: %w", cidr, err)
+			return fmt.Errorf("writing row for %s: %w", cidr, err)
 		}
 	}
 

@@ -82,7 +82,7 @@ func (m *Merger) Merge() error {
 	// Iterate all networks in the first database
 	for result := range firstReader.Networks(maxminddb.IncludeNetworksWithoutData()) {
 		if err := result.Err(); err != nil {
-			return fmt.Errorf("error iterating first database: %w", err)
+			return fmt.Errorf("iterating first database: %w", err)
 		}
 
 		prefix := result.Prefix()
@@ -103,7 +103,7 @@ func (m *Merger) Merge() error {
 
 	// Flush any remaining accumulated data
 	if err := m.acc.Flush(); err != nil {
-		return fmt.Errorf("failed to flush accumulator: %w", err)
+		return fmt.Errorf("flushing accumulator: %w", err)
 	}
 
 	return nil
@@ -127,7 +127,7 @@ func (m *Merger) processNetwork(currentNetwork netip.Prefix, dbIndex int) error 
 	iteratedAny := false
 	for result := range currentReader.NetworksWithin(currentNetwork, maxminddb.IncludeNetworksWithoutData()) {
 		if err := result.Err(); err != nil {
-			return fmt.Errorf("error iterating database within %s: %w", currentNetwork, err)
+			return fmt.Errorf("iterating database within %s: %w", currentNetwork, err)
 		}
 
 		iteratedAny = true
@@ -172,7 +172,7 @@ func (m *Merger) extractAndProcess(prefix netip.Prefix) error {
 		value, err := mmdb.ExtractValue(reader, prefix, column.Path.Segments(), m.unmarshaler)
 		if err != nil {
 			return fmt.Errorf(
-				"failed to extract column '%s' for network %s: %w",
+				"extracting column '%s' for network %s: %w",
 				column.Name,
 				prefix,
 				err,

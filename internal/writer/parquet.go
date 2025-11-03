@@ -53,13 +53,13 @@ func NewParquetWriterWithIPVersion(
 	// Build schema from config
 	schema, err := buildSchema(cfg, ipVersion)
 	if err != nil {
-		return nil, fmt.Errorf("failed to build Parquet schema: %w", err)
+		return nil, fmt.Errorf("building Parquet schema: %w", err)
 	}
 
 	// Get compression codec
 	codec, err := getCompressionCodec(cfg.Output.Parquet.Compression)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get compression codec: %w", err)
+		return nil, fmt.Errorf("getting compression codec: %w", err)
 	}
 
 	// Create Parquet writer with options
@@ -87,7 +87,7 @@ func (w *ParquetWriter) WriteRow(prefix netip.Prefix, data map[string]any) error
 	for _, netCol := range w.config.Network.Columns {
 		value, err := w.generateNetworkColumnValue(prefix, netCol.Type)
 		if err != nil {
-			return fmt.Errorf("failed to generate network column '%s': %w", netCol.Name, err)
+			return fmt.Errorf("generating network column '%s': %w", netCol.Name, err)
 		}
 		row[netCol.Name] = value
 	}
@@ -97,14 +97,14 @@ func (w *ParquetWriter) WriteRow(prefix netip.Prefix, data map[string]any) error
 		value := data[col.Name]
 		converted, err := convertToParquetType(value, col.Type)
 		if err != nil {
-			return fmt.Errorf("failed to convert column '%s': %w", col.Name, err)
+			return fmt.Errorf("converting column '%s': %w", col.Name, err)
 		}
 		row[col.Name] = converted
 	}
 
 	// Write the row
 	if _, err := w.writer.Write([]map[string]any{row}); err != nil {
-		return fmt.Errorf("failed to write Parquet row: %w", err)
+		return fmt.Errorf("writing Parquet row: %w", err)
 	}
 
 	w.rowCount++
@@ -112,7 +112,7 @@ func (w *ParquetWriter) WriteRow(prefix netip.Prefix, data map[string]any) error
 	// Flush row group if we've reached the size limit
 	if w.rowCount >= w.rowGroupSize {
 		if err := w.writer.Flush(); err != nil {
-			return fmt.Errorf("failed to flush row group: %w", err)
+			return fmt.Errorf("flushing row group: %w", err)
 		}
 		w.rowCount = 0
 	}
@@ -123,7 +123,7 @@ func (w *ParquetWriter) WriteRow(prefix netip.Prefix, data map[string]any) error
 // Flush ensures all buffered data is written.
 func (w *ParquetWriter) Flush() error {
 	if err := w.writer.Close(); err != nil {
-		return fmt.Errorf("failed to close Parquet writer: %w", err)
+		return fmt.Errorf("closing Parquet writer: %w", err)
 	}
 	return nil
 }
@@ -199,7 +199,7 @@ func buildSchema(cfg *config.Config, ipVersion int) (*parquet.Schema, error) {
 		node, err := buildNetworkNode(netCol, ipVersion)
 		if err != nil {
 			return nil, fmt.Errorf(
-				"failed to build node for network column '%s': %w",
+				"building node for network column '%s': %w",
 				netCol.Name,
 				err,
 			)
@@ -211,7 +211,7 @@ func buildSchema(cfg *config.Config, ipVersion int) (*parquet.Schema, error) {
 	for _, col := range cfg.Columns {
 		node, err := buildDataNode(col)
 		if err != nil {
-			return nil, fmt.Errorf("failed to build node for column '%s': %w", col.Name, err)
+			return nil, fmt.Errorf("building node for column '%s': %w", col.Name, err)
 		}
 		fields[col.Name] = node
 	}

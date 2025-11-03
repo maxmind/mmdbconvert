@@ -39,12 +39,12 @@ func (s *SplitRowWriter) WriteRow(prefix netip.Prefix, data map[string]any) erro
 func (s *SplitRowWriter) Flush() error {
 	if flusher, ok := s.ipv4.(interface{ Flush() error }); ok {
 		if err := flusher.Flush(); err != nil {
-			return fmt.Errorf("failed to flush IPv4 writer: %w", err)
+			return fmt.Errorf("flushing IPv4 writer: %w", err)
 		}
 	}
 	if flusher, ok := s.ipv6.(interface{ Flush() error }); ok {
 		if err := flusher.Flush(); err != nil {
-			return fmt.Errorf("failed to flush IPv6 writer: %w", err)
+			return fmt.Errorf("flushing IPv6 writer: %w", err)
 		}
 	}
 	return nil

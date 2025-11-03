@@ -129,12 +129,12 @@ func LoadConfig(path string) (*Config, error) {
 	// #nosec G304 -- path is a user-provided config file path, which is intentional
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read config file: %w", err)
+		return nil, fmt.Errorf("reading config file: %w", err)
 	}
 
 	var config Config
 	if err := toml.Unmarshal(data, &config); err != nil {
-		return nil, fmt.Errorf("failed to parse TOML: %w", err)
+		return nil, fmt.Errorf("parsing TOML: %w", err)
 	}
 
 	// Apply defaults

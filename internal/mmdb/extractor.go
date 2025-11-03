@@ -34,7 +34,7 @@ func ExtractValue(
 
 	// Decode using unmarshaler (with caching!)
 	if err := result.DecodePath(unmarshaler, segments...); err != nil {
-		return nil, fmt.Errorf("failed to decode path %s: %w", describePath(segments), err)
+		return nil, fmt.Errorf("decoding path %s: %w", describePath(segments), err)
 	}
 
 	value := unmarshaler.Result()

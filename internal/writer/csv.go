@@ -82,7 +82,7 @@ func (w *CSVWriter) WriteRow(prefix netip.Prefix, data map[string]any) error {
 	for _, netCol := range w.config.Network.Columns {
 		value, err := w.generateNetworkColumnValue(prefix, netCol.Type)
 		if err != nil {
-			return fmt.Errorf("failed to generate network column '%s': %w", netCol.Name, err)
+			return fmt.Errorf("generating network column '%s': %w", netCol.Name, err)
 		}
 		row = append(row, value)
 	}
@@ -99,7 +99,7 @@ func (w *CSVWriter) WriteRow(prefix netip.Prefix, data map[string]any) error {
 
 	// Write the row
 	if err := w.writer.Write(row); err != nil {
-		return fmt.Errorf("failed to write CSV row: %w", err)
+		return fmt.Errorf("writing CSV row: %w", err)
 	}
 
 	return nil
@@ -136,7 +136,7 @@ func (w *CSVWriter) WriteRange(start, end netip.Addr, data map[string]any) error
 	for _, netCol := range w.config.Network.Columns {
 		value, err := w.generateRangeNetworkValue(start, end, netCol.Type)
 		if err != nil {
-			return fmt.Errorf("failed to generate network column '%s': %w", netCol.Name, err)
+			return fmt.Errorf("generating network column '%s': %w", netCol.Name, err)
 		}
 		row = append(row, value)
 	}
@@ -151,7 +151,7 @@ func (w *CSVWriter) WriteRange(start, end netip.Addr, data map[string]any) error
 	}
 
 	if err := w.writer.Write(row); err != nil {
-		return fmt.Errorf("failed to write CSV row: %w", err)
+		return fmt.Errorf("writing CSV row: %w", err)
 	}
 
 	return nil
@@ -172,7 +172,7 @@ func (w *CSVWriter) writeHeader() error {
 	}
 
 	if err := w.writer.Write(header); err != nil {
-		return fmt.Errorf("failed to write header: %w", err)
+		return fmt.Errorf("writing header: %w", err)
 	}
 
 	return nil
@@ -181,7 +181,7 @@ func (w *CSVWriter) writeHeader() error {
 func (w *CSVWriter) ensureHeader() error {
 	if w.headerEnabled && !w.headerWritten {
 		if err := w.writeHeader(); err != nil {
-			return fmt.Errorf("failed to write CSV header: %w", err)
+			return fmt.Errorf("writing CSV header: %w", err)
 		}
 		w.headerWritten = true
 	}
