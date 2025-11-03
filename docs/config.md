@@ -256,7 +256,9 @@ like other complex values.
 
 #### Data Types
 
-- **Scalar values** (string, number, boolean) are output as-is
+- **Scalar values** are output based on type:
+  - Strings and numbers are output as-is
+  - Booleans are output as `1` (true) or `0` (false) in CSV format
 - **Complex values** (objects, arrays) are automatically JSON-encoded
 - **Missing data** results in an empty value (empty string for CSV, null for
   Parquet)

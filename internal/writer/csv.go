@@ -267,7 +267,10 @@ func convertToString(value any) (string, error) {
 	// Handle mmdbtype.DataType values
 	switch v := value.(type) {
 	case mmdbtype.Bool:
-		return strconv.FormatBool(bool(v)), nil
+		if bool(v) {
+			return "1", nil
+		}
+		return "0", nil
 	case mmdbtype.String:
 		return string(v), nil
 	case mmdbtype.Int32:

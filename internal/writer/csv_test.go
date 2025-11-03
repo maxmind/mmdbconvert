@@ -335,7 +335,7 @@ func TestCSVWriter_DataTypes(t *testing.T) {
 	assert.Equal(t, "hello", values[1])
 	assert.Equal(t, "42", values[2])
 	assert.Equal(t, "3.14", values[3])
-	assert.Equal(t, "true", values[4])
+	assert.Equal(t, "1", values[4])
 	assert.Equal(t, "deadbeef", values[5])
 }
 
@@ -468,8 +468,8 @@ func TestConvertToString(t *testing.T) {
 		{"uint32", mmdbtype.Uint32(42), "42"},
 		{"uint64", mmdbtype.Uint64(42), "42"},
 		{"float64", mmdbtype.Float64(3.14), "3.14"},
-		{"bool true", mmdbtype.Bool(true), "true"},
-		{"bool false", mmdbtype.Bool(false), "false"},
+		{"bool true", mmdbtype.Bool(true), "1"},
+		{"bool false", mmdbtype.Bool(false), "0"},
 		{"binary", mmdbtype.Bytes([]byte{0xaa, 0xbb}), "aabb"},
 	}
 
