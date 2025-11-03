@@ -112,6 +112,10 @@ func run(configPath string, quiet bool) error {
 	}
 	defer readers.Close()
 
+	if err := validateParquetNetworkColumns(cfg, readers); err != nil {
+		return fmt.Errorf("validating network columns: %w", err)
+	}
+
 	rowWriter, closers, outputPaths, err := prepareRowWriter(cfg, readers, quiet)
 	if err != nil {
 		return err
@@ -371,6 +375,44 @@ func splitConfiguredPaths(base, ipv4Override, ipv6Override string) (ipv4, ipv6 s
 	}
 
 	return ipv4, ipv6
+}
+
+func validateParquetNetworkColumns(cfg *config.Config, readers *mmdb.Readers) error {
+	if cfg.Output.Format != "parquet" {
+		return nil
+	}
+
+	if !hasIntegerNetworkColumns(cfg.Network.Columns) {
+		return nil
+	}
+
+	// Already split output, so integer columns are safe (each writer enforces a single IP family).
+	if cfg.Output.IPv4File != "" && cfg.Output.IPv6File != "" {
+		return nil
+	}
+
+	ipVersion, err := detectIPVersionFromDatabases(cfg, readers)
+	if err != nil {
+		return err
+	}
+
+	if ipVersion == 6 {
+		return errors.New(
+			"network column types 'start_int' and 'end_int' require split IPv4/IPv6 outputs when processing IPv6 databases; set output.ipv4_file and output.ipv6_file or switch to start_ip/end_ip",
+		)
+	}
+
+	return nil
+}
+
+func hasIntegerNetworkColumns(cols []config.NetworkColumn) bool {
+	for _, col := range cols {
+		switch col.Type {
+		case writer.NetworkColumnStartInt, writer.NetworkColumnEndInt:
+			return true
+		}
+	}
+	return false
 }
 
 func usage() {

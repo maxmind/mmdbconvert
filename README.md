@@ -326,8 +326,10 @@ name = "end_int"
 type = "end_int"       # e.g., 3405804031 (IPv4 only)
 ```
 
-**Note:** `start_int` and `end_int` only work with IPv4 addresses. For IPv6, use
-string columns (`start_ip`, `end_ip`, `cidr`).
+**Note:** `start_int` and `end_int` only work with IPv4 addresses unless you
+split your output into separate IPv4/IPv6 files via `output.ipv4_file` and
+`output.ipv6_file`. For single-file outputs that include IPv6 data, use string
+columns (`start_ip`, `end_ip`, `cidr`).
 
 ### Data Type Hints
 

@@ -125,6 +125,12 @@ type = "cidr"       # Output type
 **Default behavior:** If no `[[network.columns]]` sections are defined, a single
 CIDR column named "network" is output.
 
+> **Note:** Integer network columns (`start_int`, `end_int`) only work with IPv4
+> when writing to a single Parquet file. To use these columns with IPv6 data,
+> configure `output.ipv4_file` and `output.ipv6_file` so the rows are split by
+> IP family, or switch to the string-based columns (`start_ip`, `end_ip`,
+> `cidr`).
+
 **Example with multiple network columns:**
 
 ```toml
