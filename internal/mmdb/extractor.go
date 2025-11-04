@@ -25,6 +25,27 @@ func ExtractValue(
 		return nil, fmt.Errorf("invalid path %v: %w", path, err)
 	}
 
+	return extractValueNormalized(reader, network, segments, unmarshaler)
+}
+
+// ExtractValueNormalized is an optimized version of ExtractValue that accepts
+// pre-normalized path segments. Use NormalizeSegments to normalize paths once
+// during initialization, then use this function for repeated extractions.
+func ExtractValueNormalized(
+	reader *Reader,
+	network netip.Prefix,
+	normalizedSegments []any,
+	unmarshaler *mmdbtype.Unmarshaler,
+) (mmdbtype.DataType, error) {
+	return extractValueNormalized(reader, network, normalizedSegments, unmarshaler)
+}
+
+func extractValueNormalized(
+	reader *Reader,
+	network netip.Prefix,
+	segments []any,
+	unmarshaler *mmdbtype.Unmarshaler,
+) (mmdbtype.DataType, error) {
 	// Look up the network in the database
 	result := reader.Lookup(network.Addr())
 	if !result.Found() {
@@ -41,6 +62,13 @@ func ExtractValue(
 	unmarshaler.Clear() // Reset for next column
 
 	return value, nil
+}
+
+// NormalizeSegments normalizes path segments by converting int64 to int and
+// validating types. Use this once during initialization and cache the result
+// to avoid repeated allocations when using ExtractValueNormalized.
+func NormalizeSegments(path []any) ([]any, error) {
+	return normalizeSegments(path)
 }
 
 func normalizeSegments(path []any) ([]any, error) {

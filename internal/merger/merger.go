@@ -63,12 +63,18 @@ func NewMerger(readers *mmdb.Readers, cfg *config.Config, writer RowWriter) *Mer
 			continue
 		}
 
-		// Cache the path segments - this avoids the per-row allocation
-		// that column.Path.Segments() would cause
-		var pathSegments []any
-		if len(column.Path) > 0 {
-			pathSegments = make([]any, len(column.Path))
-			copy(pathSegments, column.Path)
+		// Normalize path segments once to avoid per-row normalization allocation
+		// This converts int64 to int and validates segment types
+		pathSegments, err := mmdb.NormalizeSegments(column.Path)
+		if err != nil {
+			// This shouldn't happen if validation passed, but handle gracefully
+			extractors[i] = columnExtractor{
+				reader:   nil,
+				path:     nil,
+				name:     column.Name,
+				database: column.Database,
+			}
+			continue
 		}
 
 		extractors[i] = columnExtractor{
@@ -211,8 +217,14 @@ func (m *Merger) extractAndProcess(prefix netip.Prefix) error {
 			)
 		}
 
-		// Extract the value using the cached reader and path
-		value, err := mmdb.ExtractValue(extractor.reader, prefix, extractor.path, m.unmarshaler)
+		// Extract the value using the cached reader and normalized path
+		// Path segments are pre-normalized in NewMerger to avoid per-row allocation
+		value, err := mmdb.ExtractValueNormalized(
+			extractor.reader,
+			prefix,
+			extractor.path,
+			m.unmarshaler,
+		)
 		if err != nil {
 			return fmt.Errorf(
 				"extracting column '%s' for network %s: %w",
