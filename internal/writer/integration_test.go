@@ -228,6 +228,8 @@ func TestEndToEnd_CSVExport_NilValues(t *testing.T) {
 		"city": cityTestDB,
 	}
 
+	includeEmpty := true
+
 	readers, err := mmdb.OpenDatabases(databases)
 	require.NoError(t, err)
 	defer readers.Close()
@@ -254,6 +256,7 @@ func TestEndToEnd_CSVExport_NilValues(t *testing.T) {
 			},
 		},
 	}
+	cfg.Output.IncludeEmptyRows = &includeEmpty
 
 	buf := &bytes.Buffer{}
 	csvWriter := NewCSVWriter(buf, cfg)
@@ -287,4 +290,6 @@ func TestEndToEnd_CSVExport_NilValues(t *testing.T) {
 
 	// We should have some rows with and without postal codes
 	t.Logf("Found empty: %v, found non-empty: %v", foundEmpty, foundNonEmpty)
+	assert.True(t, foundEmpty, "expected at least one row without a postal code")
+	assert.True(t, foundNonEmpty, "expected at least one row with a postal code")
 }

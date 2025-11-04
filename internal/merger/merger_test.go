@@ -322,6 +322,9 @@ func TestMerger_NilValues(t *testing.T) {
 		},
 	}
 
+	includeEmpty := true
+	cfg.Output.IncludeEmptyRows = &includeEmpty
+
 	writer := &mockWriter{}
 
 	merger, err := NewMerger(readers, cfg, writer)
@@ -344,8 +347,8 @@ func TestMerger_NilValues(t *testing.T) {
 	}
 
 	// We should have at least processed some rows (even if all nil)
-	_ = hasNil
-	_ = hasValue
+	assert.True(t, hasNil, "expected at least one row without a postal code")
+	assert.True(t, hasValue, "expected at least one row with a postal code")
 }
 
 func TestGetUniqueDatabaseNames(t *testing.T) {
@@ -519,7 +522,7 @@ func TestMerger_MissingData(t *testing.T) {
 	// Note: This test may not always find partial data depending on the test databases,
 	// but the important thing is that the merge completes without errors even when
 	// databases have different network coverage.
-	_ = hasPartialData
+	assert.True(t, hasPartialData, "expected at least one network with partial database coverage")
 }
 
 // TestMerger_NoRedundantLookups verifies that the optimization to thread Results
