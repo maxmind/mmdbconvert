@@ -452,7 +452,6 @@ This ensures accurate IP lookups with no ambiguity.
 
 - [Configuration Reference](docs/config.md) - Complete config file documentation
 - [Parquet Query Guide](docs/parquet-queries.md) - Optimizing IP lookup queries
-- [Implementation Plan](plan.md) - Detailed technical design (for developers)
 
 ## Requirements
 
