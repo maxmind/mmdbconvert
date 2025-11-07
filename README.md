@@ -28,6 +28,81 @@ Parquet, or MMDB format.
 
 ## Installation
 
+### Binary Releases (Recommended)
+
+Download pre-built binaries from the
+[GitHub Releases page](https://github.com/maxmind/mmdbconvert/releases).
+
+> **Architecture Guide:**
+>
+> - `amd64` = x86-64 / x64 (most common for Intel/AMD processors)
+> - `arm64` = ARM 64-bit (Apple Silicon, AWS Graviton, Raspberry Pi 4+)
+> - `darwin` = macOS
+> - Replace `<VERSION>` with the release version (e.g., `0.1.0`)
+> - Replace `<ARCH>` with your architecture (e.g., `amd64` or `arm64`)
+
+#### Linux
+
+**Using .deb package (Debian/Ubuntu):**
+
+1. Download the `.deb` file for your architecture from the releases page
+2. Install using dpkg:
+
+```bash
+sudo dpkg -i mmdbconvert_<VERSION>_<ARCH>.deb
+```
+
+**Using .rpm package (RedHat/CentOS/Fedora):**
+
+1. Download the `.rpm` file for your architecture from the releases page
+2. Install using rpm:
+
+```bash
+sudo rpm -i mmdbconvert_<VERSION>_<ARCH>.rpm
+```
+
+**Using tar.gz archive:**
+
+1. Download the Linux tar.gz file for your architecture from the releases page
+2. Extract and install:
+
+```bash
+tar -xzf mmdbconvert_<VERSION>_linux_<ARCH>.tar.gz
+sudo mv mmdbconvert/mmdbconvert /usr/local/bin/
+```
+
+#### macOS
+
+1. Download the macOS tar.gz file for your architecture from the releases page:
+   - `darwin_arm64` for Apple Silicon (M1/M2/M3/M4)
+   - `darwin_amd64` for Intel Macs
+2. Extract and install:
+
+```bash
+tar -xzf mmdbconvert_<VERSION>_darwin_<ARCH>.tar.gz
+sudo mv mmdbconvert/mmdbconvert /usr/local/bin/
+```
+
+#### Windows
+
+1. Download the Windows zip file for your architecture from the releases page
+2. Extract the zip file
+3. Add the `mmdbconvert.exe` binary to your PATH or run it directly from the
+   extracted location
+
+**Using PowerShell:**
+
+```powershell
+# Extract (adjust filename to match your download)
+Expand-Archive -Path mmdbconvert_<VERSION>_windows_<ARCH>.zip -DestinationPath .
+
+# Run
+.\mmdbconvert\mmdbconvert.exe --version
+```
+
+> **Note:** ARM64 binaries are available for all platforms. Choose the
+> appropriate architecture for your system.
+
 ### From Source
 
 ```bash
