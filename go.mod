@@ -3,7 +3,7 @@ module github.com/maxmind/mmdbconvert
 go 1.25.3
 
 require (
-	github.com/maxmind/mmdbwriter v1.1.1-0.20251104221330-fe6950f28326
+	github.com/maxmind/mmdbwriter v1.1.1-0.20251215205057-2f3252140e00
 	github.com/oschwald/maxminddb-golang/v2 v2.1.1
 	github.com/parquet-go/parquet-go v0.26.2
 	github.com/pelletier/go-toml/v2 v2.2.4
@@ -20,7 +20,7 @@ require (
 	github.com/parquet-go/jsonlite v1.0.0 // indirect
 	github.com/pierrec/lz4/v4 v4.1.21 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	golang.org/x/sys v0.38.0 // indirect
+	golang.org/x/sys v0.39.0 // indirect
 	google.golang.org/protobuf v1.34.2 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
