@@ -504,6 +504,24 @@ ipv4_file = "geo_ipv4.parquet"
 ipv6_file = "geo_ipv6.parquet"
 ```
 
+✅ **Sorting metadata is automatic**
+
+When you configure `start_int` columns, mmdbconvert automatically writes sorting
+metadata to the Parquet file. This tells query engines that rows are sorted by
+`start_int`, enabling optimizations like binary search. You can verify sorting
+metadata is present:
+
+```bash
+# Using parquet-go (via Go code)
+# Each row group will show: Path: [start_int], Descending: false
+
+# Using DuckDB - check min/max statistics show non-overlapping ranges
+duckdb -c "SELECT row_group_id, stats_min_value, stats_max_value
+           FROM parquet_metadata('geo.parquet')
+           WHERE path_in_schema = 'start_int'
+           ORDER BY row_group_id;"
+```
+
 ✅ **Tune row group size for your use case**
 
 - Default: 500,000 rows (~250 MB)
@@ -600,7 +618,7 @@ ipv6_file = "geo_ipv6.parquet"
 1. **Always use integer columns** (`start_int`, `end_int`) for WHERE clauses
 2. **Integer columns enable predicate pushdown** → 10-100x faster queries
 3. **Row group statistics** allow query engines to skip most data
-4. **Sorted output is automatic** (from MMDB library)
+4. **Sorting metadata is automatic** when using `start_int` columns
 5. **Compression matters:** Use `snappy` for query-optimized files
 
 With proper configuration, you can achieve **millisecond query times** on
