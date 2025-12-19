@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Parquet sorting column metadata for query optimization. When start_int
+  columns are configured, mmdbconvert now writes sorting metadata to the
+  Parquet file declaring that rows are sorted by start_int in ascending order.
+  This enables query engines like DuckDB, Spark, and Trino to use the sort
+  order for potential optimizations like binary search.
+
 ## [0.1.0] - 2025-11-07
 
 ### Added
