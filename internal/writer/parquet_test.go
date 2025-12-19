@@ -373,6 +373,113 @@ func TestParquetWriter_RowGroupSize(t *testing.T) {
 	assert.GreaterOrEqual(t, len(pf.RowGroups()), 2)
 }
 
+func TestParquetWriter_SortingMetadata(t *testing.T) {
+	tests := []struct {
+		name           string
+		networkColumns []config.NetworkColumn
+		ipVersion      int
+		expectSorting  bool
+		expectedColumn string
+	}{
+		{
+			name: "start_int declares sorting",
+			networkColumns: []config.NetworkColumn{
+				{Name: "start_int", Type: "start_int"},
+				{Name: "end_int", Type: "end_int"},
+			},
+			ipVersion:      IPVersionAny,
+			expectSorting:  true,
+			expectedColumn: "start_int",
+		},
+		{
+			name: "no integer columns - no sorting",
+			networkColumns: []config.NetworkColumn{
+				{Name: "network", Type: "cidr"},
+			},
+			ipVersion:     IPVersionAny,
+			expectSorting: false,
+		},
+		{
+			name: "cidr with start_ip and end_ip - no sorting",
+			networkColumns: []config.NetworkColumn{
+				{Name: "network", Type: "cidr"},
+				{Name: "start_ip", Type: "start_ip"},
+				{Name: "end_ip", Type: "end_ip"},
+			},
+			ipVersion:     IPVersionAny,
+			expectSorting: false,
+		},
+		{
+			name: "custom start_int column name",
+			networkColumns: []config.NetworkColumn{
+				{Name: "ip_start", Type: "start_int"},
+				{Name: "ip_end", Type: "end_int"},
+			},
+			ipVersion:      IPVersionAny,
+			expectSorting:  true,
+			expectedColumn: "ip_start",
+		},
+		{
+			name: "IPv6 binary start_int declares sorting",
+			networkColumns: []config.NetworkColumn{
+				{Name: "start_int", Type: "start_int"},
+				{Name: "end_int", Type: "end_int"},
+			},
+			ipVersion:      IPVersion6,
+			expectSorting:  true,
+			expectedColumn: "start_int",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			buf := &bytes.Buffer{}
+
+			cfg := &config.Config{
+				Output: config.OutputConfig{
+					Parquet: config.ParquetConfig{
+						Compression:  "none",
+						RowGroupSize: 100,
+					},
+				},
+				Network: config.NetworkConfig{
+					Columns: tt.networkColumns,
+				},
+				Columns: []config.Column{},
+			}
+
+			writer, err := NewParquetWriterWithIPVersion(buf, cfg, tt.ipVersion)
+			require.NoError(t, err)
+
+			// Write a row to create a row group
+			var prefix netip.Prefix
+			if tt.ipVersion == IPVersion6 {
+				prefix = netip.MustParsePrefix("2001:db8::/126")
+			} else {
+				prefix = netip.MustParsePrefix("192.168.1.0/24")
+			}
+			require.NoError(t, writer.WriteRow(prefix, []mmdbtype.DataType{}))
+			require.NoError(t, writer.Flush())
+
+			// Read back and verify sorting metadata
+			pf, err := parquet.OpenFile(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
+			require.NoError(t, err)
+
+			rowGroups := pf.RowGroups()
+			require.NotEmpty(t, rowGroups)
+
+			sortingCols := rowGroups[0].SortingColumns()
+			if tt.expectSorting {
+				require.Len(t, sortingCols, 1, "expected exactly one sorting column")
+				assert.Equal(t, []string{tt.expectedColumn}, sortingCols[0].Path())
+				assert.False(t, sortingCols[0].Descending(), "expected ascending sort")
+			} else {
+				assert.Empty(t, sortingCols, "expected no sorting columns")
+			}
+		})
+	}
+}
+
 func TestConvertToParquetType(t *testing.T) {
 	tests := []struct {
 		name     string

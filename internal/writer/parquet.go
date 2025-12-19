@@ -63,12 +63,17 @@ func NewParquetWriterWithIPVersion(
 		return nil, fmt.Errorf("getting compression codec: %w", err)
 	}
 
-	// Create Parquet writer with options
-	parquetWriter := parquet.NewGenericWriter[map[string]any](
-		w,
+	// Build writer options: schema, compression, and optional sorting metadata
+	opts := []parquet.WriterOption{
 		schema,
 		parquet.Compression(codec),
-	)
+	}
+	if sortOpt := determineSortingColumns(cfg); sortOpt != nil {
+		opts = append(opts, sortOpt)
+	}
+
+	// Create Parquet writer with options
+	parquetWriter := parquet.NewGenericWriter[map[string]any](w, opts...)
 
 	return &ParquetWriter{
 		writer:       parquetWriter,
@@ -362,4 +367,18 @@ func getCompressionCodec(name string) (compress.Codec, error) {
 	default:
 		return nil, fmt.Errorf("unknown compression codec: %s", name)
 	}
+}
+
+// determineSortingColumns returns a sorting writer config if a start_int column
+// is configured. MMDB data is naturally sorted by network prefix, so we declare
+// this sort order in the Parquet metadata to help query engines optimize lookups.
+func determineSortingColumns(cfg *config.Config) parquet.WriterOption {
+	for _, col := range cfg.Network.Columns {
+		if col.Type == NetworkColumnStartInt {
+			return parquet.SortingWriterConfig(
+				parquet.SortingColumns(parquet.Ascending(string(col.Name))),
+			)
+		}
+	}
+	return nil
 }
