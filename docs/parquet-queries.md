@@ -330,6 +330,106 @@ ipv4_file = "geo_ipv4.parquet"
 ipv6_file = "geo_ipv6.parquet"
 ```
 
+## BigQuery with Network Bucketing
+
+BigQuery performs full table scans for range queries like
+`WHERE start_int <= ip AND end_int >= ip`. Use the `network_bucket` column to
+enable efficient lookups.
+
+### Configuration
+
+```toml
+[output]
+format = "parquet"
+ipv4_file = "geoip-v4.parquet"
+ipv6_file = "geoip-v6.parquet"
+
+[output.parquet]
+ipv4_bucket_size = 16  # Default: /16 prefix
+ipv6_bucket_size = 16  # Default: /16 prefix
+
+[[network.columns]]
+name = "start_int"
+type = "start_int"
+
+[[network.columns]]
+name = "end_int"
+type = "end_int"
+
+[[network.columns]]
+name = "network_bucket"
+type = "network_bucket"
+```
+
+### BigQuery Query Patterns
+
+**Note:** The BigQuery table must be clustered on the `network_bucket` column
+for efficient querying.
+
+**Important:** The bucket size in your queries must match the configured bucket
+size. The examples below use the default `/16` bucket size. If you configured a
+different `ipv4_bucket_size` or `ipv6_bucket_size`, adjust the second argument
+to `NET.IP_TRUNC()` accordingly.
+
+#### IPv4 Lookup
+
+For IPv4, the bucket is int64. Use `NET.IP_TRUNC()` to get the bucket and
+`NET.IPV4_TO_INT64()` to convert to the integer type:
+
+```sql
+-- Using default ipv4_bucket_size = 16
+SELECT *
+FROM `project.dataset.geoip_v4`
+WHERE network_bucket = NET.IPV4_TO_INT64(NET.IP_TRUNC(NET.IP_FROM_STRING('203.0.113.100'), 16))
+AND NET.IPV4_TO_INT64(NET.IP_FROM_STRING('203.0.113.100')) BETWEEN start_int AND end_int;
+```
+
+#### IPv6 Lookup
+
+For IPv6, the bucket is a hex string. Use `TO_HEX()` with `NET.IP_TRUNC()`:
+
+```sql
+-- Using default ipv6_bucket_size = 16
+SELECT *
+FROM `project.dataset.geoip_v6`
+WHERE network_bucket = TO_HEX(NET.IP_TRUNC(NET.IP_FROM_STRING('2001:db8::1'), 16))
+AND NET.IP_FROM_STRING('2001:db8::1') BETWEEN start_int AND end_int;
+```
+
+### Why Bucketing Helps
+
+Without bucketing, BigQuery must scan every row to check the range condition.
+With bucketing:
+
+1. BigQuery first filters by exact match on `network_bucket`
+2. Only matching bucket rows are checked for the range condition
+3. Result: Query scans only rows in the matching bucket instead of the entire
+   table
+
+### Row Duplication
+
+Networks larger than the bucket size are duplicated. For example, a /15 network
+spans two /16 buckets:
+
+**IPv4 example (int64 bucket values):**
+
+| network    | start_int | end_int  | network_bucket |
+| ---------- | --------- | -------- | -------------- |
+| 2.0.0.0/15 | 33554432  | 33685503 | 33554432       |
+| 2.0.0.0/15 | 33554432  | 33685503 | 33619968       |
+
+Both rows have the same `start_int`/`end_int` (the full /15 range), but
+different `network_bucket` values (2.0.0.0 = 33554432, 2.1.0.0 = 33619968).
+Queries for IPs in either bucket will find the network.
+
+### Why Bucket is a Hex String
+
+BigQuery cannot cluster on the `bytes` type, so we can't use the same type as we
+do for `start_int` and `end_int`. Using `int` to include the prefix or using
+`bignumeric` would be an option, but both are more complicated to query with.
+Another reason to use a hex string is Snowflake's `PARSE_IP()` function provides
+the address in this format.
+
 ## Common Query Patterns
 
 ### Single IP Lookup

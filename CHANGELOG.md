@@ -15,6 +15,15 @@ and this project adheres to
   declaring that rows are sorted by start_int in ascending order. This enables
   query engines like DuckDB, Spark, and Trino to use the sort order for
   potential optimizations like binary search.
+- New `network_bucket` network column type for Parquet output, enabling
+  efficient IP lookups in BigQuery and other analytics platforms. When a network
+  spans multiple buckets, rows are duplicated with different bucket values while
+  preserving original network info. For IPv4, the bucket is integer (matching
+  `start_int`/`end_int`). For IPv6, the bucket is a hex string (e.g.,
+  "200f0000000000000000000000000000"). Requires split output files (`ipv4_file`
+  and `ipv6_file`).
+- New Parquet options `ipv4_bucket_size` and `ipv6_bucket_size` to configure
+  bucket prefix lengths (default: 16).
 
 ## [0.1.0] - 2025-11-07
 

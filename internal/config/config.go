@@ -47,8 +47,10 @@ type CSVConfig struct {
 
 // ParquetConfig defines Parquet output options.
 type ParquetConfig struct {
-	Compression  string `toml:"compression"`    // "none", "snappy", "gzip", "lz4", "zstd" (default: "snappy")
-	RowGroupSize int    `toml:"row_group_size"` // Rows per row group (default: 500000)
+	Compression    string `toml:"compression"`      // "none", "snappy", "gzip", "lz4", "zstd" (default: "snappy")
+	RowGroupSize   int    `toml:"row_group_size"`   // Rows per row group (default: 500000)
+	IPv4BucketSize int    `toml:"ipv4_bucket_size"` // Bucket prefix length for IPv4 (default: 16)
+	IPv6BucketSize int    `toml:"ipv6_bucket_size"` // Bucket prefix length for IPv6 (default: 16)
 }
 
 // MMDBConfig defines MMDB output options.
@@ -173,6 +175,12 @@ func applyDefaults(config *Config) {
 	}
 	if config.Output.Parquet.RowGroupSize == 0 {
 		config.Output.Parquet.RowGroupSize = 500000
+	}
+	if config.Output.Parquet.IPv4BucketSize == 0 {
+		config.Output.Parquet.IPv4BucketSize = 16
+	}
+	if config.Output.Parquet.IPv6BucketSize == 0 {
+		config.Output.Parquet.IPv6BucketSize = 16
 	}
 
 	// MMDB defaults
@@ -315,8 +323,10 @@ func validate(config *Config) error {
 	// Validate network columns
 	validNetworkTypes := map[string]bool{
 		"cidr": true, "start_ip": true, "end_ip": true, "start_int": true, "end_int": true,
+		"network_bucket": true,
 	}
 	networkColNames := map[mmdbtype.String]bool{}
+	hasBucketColumn := false
 	for _, col := range config.Network.Columns {
 		if col.Name == "" {
 			return errors.New("network column name is required")
@@ -326,15 +336,50 @@ func validate(config *Config) error {
 		}
 		if !validNetworkTypes[col.Type] {
 			return fmt.Errorf(
-				"invalid network column type '%s' for column '%s', must be one of: cidr, start_ip, end_ip, start_int, end_int",
+				"invalid network column type '%s' for column '%s', must be one of: cidr, start_ip, end_ip, start_int, end_int, network_bucket",
 				col.Type,
 				col.Name,
 			)
+		}
+		if col.Type == "network_bucket" {
+			hasBucketColumn = true
 		}
 		if networkColNames[col.Name] {
 			return fmt.Errorf("duplicate network column name '%s'", col.Name)
 		}
 		networkColNames[col.Name] = true
+	}
+
+	if hasBucketColumn {
+		if config.Output.Format != formatParquet {
+			return errors.New(
+				"network_bucket column type is only supported for Parquet output",
+			)
+		}
+
+		// network_bucket column requires split files (different types for IPv4 vs
+		// IPv6)
+		if config.Output.IPv4File == "" || config.Output.IPv6File == "" {
+			return errors.New(
+				"network_bucket column requires split files (ipv4_file and ipv6_file)",
+			)
+		}
+
+		// Validate bucket sizes when network_bucket column is used
+		if config.Output.Parquet.IPv4BucketSize < 1 ||
+			config.Output.Parquet.IPv4BucketSize > 32 {
+			return fmt.Errorf(
+				"ipv4_bucket_size must be between 1 and 32, got %d",
+				config.Output.Parquet.IPv4BucketSize,
+			)
+		}
+		if config.Output.Parquet.IPv6BucketSize < 1 ||
+			config.Output.Parquet.IPv6BucketSize > 128 {
+			return fmt.Errorf(
+				"ipv6_bucket_size must be between 1 and 128, got %d",
+				config.Output.Parquet.IPv6BucketSize,
+			)
+		}
 	}
 
 	// Validate data columns

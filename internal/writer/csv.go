@@ -26,6 +26,7 @@ const (
 	NetworkColumnEndIP    = "end_ip"
 	NetworkColumnStartInt = "start_int"
 	NetworkColumnEndInt   = "end_int"
+	NetworkColumnBucket   = "network_bucket"
 )
 
 // CSVWriter writes merged MMDB data to CSV format.
