@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/maxmind/mmdbconvert/internal/config"
+	"github.com/maxmind/mmdbconvert/internal/network"
 )
 
 func TestParquetWriter_SingleRow(t *testing.T) {
@@ -847,4 +848,140 @@ func ipv6ToBytes(s string) []byte {
 	ip := netip.MustParseAddr(s)
 	b := ip.As16()
 	return b[:]
+}
+
+// ipv6BucketToInt64 converts an IPv6 bucket address string to int64 (60-bit value).
+func ipv6BucketToInt64(s string) int64 {
+	ip := netip.MustParseAddr(s)
+	val, err := network.IPv6BucketToInt64(ip)
+	if err != nil {
+		panic(err)
+	}
+	return val
+}
+
+func TestParquetWriter_NetworkBucket_IPv6_Int(t *testing.T) {
+	tests := []struct {
+		name             string
+		network          string
+		bucketSize       int
+		expectedRowCount int
+		expectedBuckets  []int64
+		expectedStartInt []byte
+		expectedEndInt   []byte
+	}{
+		{
+			name:             "no split - /24 in /16 bucket",
+			network:          "2001:0d00::/24",
+			bucketSize:       16,
+			expectedRowCount: 1,
+			expectedBuckets:  []int64{ipv6BucketToInt64("2001::")},
+			expectedStartInt: ipv6ToBytes("2001:0d00::"),
+			expectedEndInt:   ipv6ToBytes("2001:0dff:ffff:ffff:ffff:ffff:ffff:ffff"),
+		},
+		{
+			name:             "split - /15 into two /16 buckets",
+			network:          "abcc::/15",
+			bucketSize:       16,
+			expectedRowCount: 2,
+			expectedBuckets: []int64{
+				ipv6BucketToInt64("abcc::"),
+				ipv6BucketToInt64("abcd::"),
+			},
+			expectedStartInt: ipv6ToBytes("abcc::"),
+			expectedEndInt:   ipv6ToBytes("abcd:ffff:ffff:ffff:ffff:ffff:ffff:ffff"),
+		},
+		{
+			name:             "large split - /12 into 16 /16 buckets",
+			network:          "2000::/12",
+			bucketSize:       16,
+			expectedRowCount: 16,
+			expectedBuckets: []int64{
+				ipv6BucketToInt64("2000::"),
+				ipv6BucketToInt64("2001::"),
+				ipv6BucketToInt64("2002::"),
+				ipv6BucketToInt64("2003::"),
+				ipv6BucketToInt64("2004::"),
+				ipv6BucketToInt64("2005::"),
+				ipv6BucketToInt64("2006::"),
+				ipv6BucketToInt64("2007::"),
+				ipv6BucketToInt64("2008::"),
+				ipv6BucketToInt64("2009::"),
+				ipv6BucketToInt64("200a::"),
+				ipv6BucketToInt64("200b::"),
+				ipv6BucketToInt64("200c::"),
+				ipv6BucketToInt64("200d::"),
+				ipv6BucketToInt64("200e::"),
+				ipv6BucketToInt64("200f::"),
+			},
+			expectedStartInt: ipv6ToBytes("2000::"),
+			expectedEndInt:   ipv6ToBytes("200f:ffff:ffff:ffff:ffff:ffff:ffff:ffff"),
+		},
+		{
+			name:             "custom bucket size - /23 into /24 buckets",
+			network:          "2001:0000::/23",
+			bucketSize:       24,
+			expectedRowCount: 2,
+			expectedBuckets: []int64{
+				ipv6BucketToInt64("2001::"),
+				ipv6BucketToInt64("2001:100::"),
+			},
+			expectedStartInt: ipv6ToBytes("2001::"),
+			expectedEndInt:   ipv6ToBytes("2001:01ff:ffff:ffff:ffff:ffff:ffff:ffff"),
+		},
+		{
+			name:             "single IP /128",
+			network:          "2001:db8::1/128",
+			bucketSize:       16,
+			expectedRowCount: 1,
+			expectedBuckets:  []int64{ipv6BucketToInt64("2001::")},
+			expectedStartInt: ipv6ToBytes("2001:db8::1"),
+			expectedEndInt:   ipv6ToBytes("2001:db8::1"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			buf := &bytes.Buffer{}
+
+			cfg := &config.Config{
+				Output: config.OutputConfig{
+					Parquet: config.ParquetConfig{
+						Compression:    "none",
+						RowGroupSize:   500000,
+						IPv6BucketSize: tt.bucketSize,
+						IPv6BucketType: config.IPv6BucketTypeInt,
+					},
+				},
+				Network: config.NetworkConfig{
+					Columns: []config.NetworkColumn{
+						{Name: "start_int", Type: "start_int"},
+						{Name: "end_int", Type: "end_int"},
+						{Name: "network_bucket", Type: "network_bucket"},
+					},
+				},
+				Columns: []config.Column{{Name: "country", Type: "string"}},
+			}
+
+			writer, err := NewParquetWriterWithIPVersion(buf, cfg, IPVersion6)
+			require.NoError(t, err)
+
+			prefix := netip.MustParsePrefix(tt.network)
+			err = writer.WriteRow(prefix, []mmdbtype.DataType{mmdbtype.String("XX")})
+			require.NoError(t, err)
+
+			err = writer.Flush()
+			require.NoError(t, err)
+
+			rows := readParquetRows(t, buf)
+			require.Len(t, rows, tt.expectedRowCount)
+
+			for i, row := range rows {
+				assert.Equal(t, tt.expectedBuckets[i], row["network_bucket"])
+				assert.Equal(t, tt.expectedStartInt, row["start_int"])
+				assert.Equal(t, tt.expectedEndInt, row["end_int"])
+				assert.Equal(t, "XX", row["country"])
+			}
+		})
+	}
 }

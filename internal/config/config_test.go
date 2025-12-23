@@ -322,6 +322,50 @@ path = ["country", "iso_code"]
 				}
 			},
 		},
+		{
+			name: "parquet with ipv6_bucket_type int",
+			toml: `
+[output]
+format = "parquet"
+ipv4_file = "output-v4.parquet"
+ipv6_file = "output-v6.parquet"
+
+[output.parquet]
+ipv6_bucket_type = "int"
+ipv6_bucket_size = 48
+
+[[network.columns]]
+name = "start_int"
+type = "start_int"
+
+[[network.columns]]
+name = "network_bucket"
+type = "network_bucket"
+
+[[databases]]
+name = "geo"
+path = "/path/to/geo.mmdb"
+
+[[columns]]
+name = "country"
+database = "geo"
+path = ["country", "iso_code"]
+`,
+			validate: func(t *testing.T, cfg *Config) {
+				if cfg.Output.Parquet.IPv6BucketType != IPv6BucketTypeInt {
+					t.Errorf(
+						"expected IPv6BucketType=int, got %s",
+						cfg.Output.Parquet.IPv6BucketType,
+					)
+				}
+				if cfg.Output.Parquet.IPv6BucketSize != 48 {
+					t.Errorf(
+						"expected IPv6BucketSize=48, got %d",
+						cfg.Output.Parquet.IPv6BucketSize,
+					)
+				}
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -818,7 +862,7 @@ ipv4_file = "output-v4.parquet"
 ipv6_file = "output-v6.parquet"
 
 [output.parquet]
-ipv6_bucket_size = 129
+ipv6_bucket_size = 61
 
 [[network.columns]]
 name = "network_bucket"
@@ -833,7 +877,33 @@ name = "country"
 database = "geo"
 path = ["country", "iso_code"]
 `,
-			expectError: "ipv6_bucket_size must be between 1 and 128",
+			expectError: "ipv6_bucket_size must be between 1 and 60",
+		},
+		{
+			name: "invalid ipv6_bucket_type",
+			toml: `
+[output]
+format = "parquet"
+ipv4_file = "output-v4.parquet"
+ipv6_file = "output-v6.parquet"
+
+[output.parquet]
+ipv6_bucket_type = "invalid"
+
+[[network.columns]]
+name = "network_bucket"
+type = "network_bucket"
+
+[[databases]]
+name = "geo"
+path = "/path/to/geo.mmdb"
+
+[[columns]]
+name = "country"
+database = "geo"
+path = ["country", "iso_code"]
+`,
+			expectError: "ipv6_bucket_type must be 'string' or 'int'",
 		},
 	}
 

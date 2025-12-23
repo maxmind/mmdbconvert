@@ -345,8 +345,9 @@ ipv4_file = "geoip-v4.parquet"
 ipv6_file = "geoip-v6.parquet"
 
 [output.parquet]
-ipv4_bucket_size = 16  # Default: /16 prefix
-ipv6_bucket_size = 16  # Default: /16 prefix
+ipv4_bucket_size = 16    # Default: /16 prefix
+ipv6_bucket_size = 16    # Default: /16 prefix
+ipv6_bucket_type = "string"  # Default: "string" (hex), or "int" (60-bit integer)
 
 [[network.columns]]
 name = "start_int"
@@ -386,7 +387,9 @@ AND NET.IPV4_TO_INT64(NET.IP_FROM_STRING('203.0.113.100')) BETWEEN start_int AND
 
 #### IPv6 Lookup
 
-For IPv6, the bucket is a hex string. Use `TO_HEX()` with `NET.IP_TRUNC()`:
+The query depends on your `ipv6_bucket_type` configuration.
+
+**Using default `ipv6_bucket_type = "string"` (hex string):**
 
 ```sql
 -- Using default ipv6_bucket_size = 16
@@ -395,6 +398,21 @@ FROM `project.dataset.geoip_v6`
 WHERE network_bucket = TO_HEX(NET.IP_TRUNC(NET.IP_FROM_STRING('2001:db8::1'), 16))
 AND NET.IP_FROM_STRING('2001:db8::1') BETWEEN start_int AND end_int;
 ```
+
+**Using `ipv6_bucket_type = "int"` (60-bit int64):**
+
+```sql
+-- Using default ipv6_bucket_size = 16
+SELECT *
+FROM `project.dataset.geoip_v6`
+WHERE network_bucket = CAST(CONCAT('0x', SUBSTR(
+    TO_HEX(NET.IP_TRUNC(NET.IP_FROM_STRING('2001:db8::1'), 16)), 1, 15
+  )) AS INT64)
+AND NET.IP_FROM_STRING('2001:db8::1') BETWEEN start_int AND end_int;
+```
+
+The int type expression extracts the first 60 bits (15 hex chars) of the
+truncated IPv6 address as an integer.
 
 ### Why Bucketing Helps
 
@@ -422,13 +440,32 @@ Both rows have the same `start_int`/`end_int` (the full /15 range), but
 different `network_bucket` values (2.0.0.0 = 33554432, 2.1.0.0 = 33619968).
 Queries for IPs in either bucket will find the network.
 
-### Why Bucket is a Hex String
+### IPv6 Bucket Type Options
 
-BigQuery cannot cluster on the `bytes` type, so we can't use the same type as we
-do for `start_int` and `end_int`. Using `int` to include the prefix or using
-`bignumeric` would be an option, but both are more complicated to query with.
-Another reason to use a hex string is Snowflake's `PARSE_IP()` function provides
-the address in this format.
+IPv6 buckets can be stored as either hex strings (default) or int64 values:
+
+**String type (default):**
+
+- Format: 32-character hex string (e.g., "20010db8000000000000000000000000")
+- Storage: 32 bytes per value
+
+**Int type (`ipv6_bucket_type = "int"`):**
+
+- Format: First 60 bits of the bucket address as int64
+- Storage: 8 bytes per value (4x smaller than string)
+
+We use 60 bits (not 64) because 60-bit values always fit in a positive int64,
+which simplifies BigQuery queries by avoiding two's complement handling.
+
+**When to use each type:**
+
+- Use **string** (default) for databases where hex string representations are
+  simpler to work with.
+- Use **int** for reduced storage cost at the price of more complicated queries.
+
+We do not provide a `bytes` type for the IPv6 bucket. Primarily this is because
+there so far has not been a need. For example, BigQuery cannot cluster on
+`bytes`, so it is not helpful there.
 
 ## Common Query Patterns
 

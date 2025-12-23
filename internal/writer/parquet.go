@@ -274,8 +274,15 @@ func (w *ParquetWriter) generateNetworkColumnValue(
 			// IPv4: int64 (same as start_int)
 			return int64(network.IPv4ToUint32(bucketAddr)), nil
 		}
-		// IPv6: hex string. This is suitable for e.g. clustering in BigQuery.
-		return fmt.Sprintf("%x", bucketAddr.As16()), nil
+		// IPv6: hex string by default, int64 when explicitly configured
+		if w.config.Output.Parquet.IPv6BucketType != config.IPv6BucketTypeInt {
+			return fmt.Sprintf("%x", bucketAddr.As16()), nil
+		}
+		val, err := network.IPv6BucketToInt64(bucketAddr)
+		if err != nil {
+			return nil, fmt.Errorf("converting IPv6 bucket to int64: %w", err)
+		}
+		return val, nil
 
 	default:
 		return nil, fmt.Errorf("unknown network column type: %s", colType)
@@ -288,7 +295,7 @@ func buildSchema(cfg *config.Config, ipVersion int) (*parquet.Schema, error) {
 
 	// Add network columns
 	for _, netCol := range cfg.Network.Columns {
-		node, err := buildNetworkNode(netCol, ipVersion)
+		node, err := buildNetworkNode(netCol, ipVersion, cfg)
 		if err != nil {
 			return nil, fmt.Errorf(
 				"building node for network column '%s': %w",
@@ -313,7 +320,11 @@ func buildSchema(cfg *config.Config, ipVersion int) (*parquet.Schema, error) {
 }
 
 // buildNetworkNode builds a Parquet node for a network column.
-func buildNetworkNode(col config.NetworkColumn, ipVersion int) (parquet.Node, error) {
+func buildNetworkNode(
+	col config.NetworkColumn,
+	ipVersion int,
+	cfg *config.Config,
+) (parquet.Node, error) {
 	switch col.Type {
 	case NetworkColumnCIDR, NetworkColumnStartIP, NetworkColumnEndIP:
 		// String columns
@@ -326,8 +337,9 @@ func buildNetworkNode(col config.NetworkColumn, ipVersion int) (parquet.Node, er
 		return parquet.Optional(parquet.Int(64)), nil
 
 	case NetworkColumnBucket:
-		if ipVersion == ipVersion6 {
-			// IPv6 bucket is a hex string.
+		// IPv6 bucket: string (hex) by default, int64 when explicitly configured
+		if ipVersion == ipVersion6 &&
+			cfg.Output.Parquet.IPv6BucketType != config.IPv6BucketTypeInt {
 			return parquet.Optional(parquet.String()), nil
 		}
 		return parquet.Optional(parquet.Int(64)), nil

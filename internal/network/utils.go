@@ -3,6 +3,7 @@ package network
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"net/netip"
 
@@ -16,6 +17,36 @@ func IPv4ToUint32(addr netip.Addr) uint32 {
 	}
 	bytes := addr.As4()
 	return binary.BigEndian.Uint32(bytes[:])
+}
+
+// IPv6BucketToInt64 converts the first 60 bits of an IPv6 address to int64.
+//
+// This is used for IPv6 bucket values where the address has been masked to
+// the bucket boundary (trailing bits are zero).
+//
+// NOTE: The address must already be masked to the appropriate bucket (i.e.,
+// if you have a bucket size of /16, you must provide 2001:: as opposed to
+// something like 2001:abcd::).
+//
+// We use 60 bits (not 64) because 60-bit values always fit in a positive int64,
+// which simplifies BigQuery queries (no two's complement handling needed).
+//
+// In BigQuery, you can compute the same value using:
+//
+//	CAST(CONCAT('0x', SUBSTR(
+//	  TO_HEX(NET.IP_TRUNC(NET.IP_FROM_STRING(ip), bucket_size)), 1, 15
+//	)) AS INT64)
+//
+// where bucket_size is the prefix length used for bucketing.
+func IPv6BucketToInt64(addr netip.Addr) (int64, error) {
+	if !addr.Is6() {
+		return 0, errors.New("IPv6BucketToInt64 called with non-IPv6 address")
+	}
+	bytes := addr.As16()
+	// Read first 64 bits, then right-shift by 4 to get top 60 bits
+	val := binary.BigEndian.Uint64(bytes[:8])
+	//nolint:gosec // 60-bit value always fits in positive int64
+	return int64(val >> 4), nil
 }
 
 // IsAdjacent checks if two IP addresses are consecutive (no gap between them).

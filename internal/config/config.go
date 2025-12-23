@@ -16,6 +16,11 @@ const (
 	formatCSV     = "csv"
 	formatParquet = "parquet"
 	formatMMDB    = "mmdb"
+
+	// IPv6BucketTypeString stores IPv6 bucket values as hex strings.
+	IPv6BucketTypeString = "string"
+	// IPv6BucketTypeInt stores IPv6 bucket values as int64 (first 60 bits).
+	IPv6BucketTypeInt = "int"
 )
 
 // Config represents the complete configuration file structure.
@@ -51,6 +56,7 @@ type ParquetConfig struct {
 	RowGroupSize   int    `toml:"row_group_size"`   // Rows per row group (default: 500000)
 	IPv4BucketSize int    `toml:"ipv4_bucket_size"` // Bucket prefix length for IPv4 (default: 16)
 	IPv6BucketSize int    `toml:"ipv6_bucket_size"` // Bucket prefix length for IPv6 (default: 16)
+	IPv6BucketType string `toml:"ipv6_bucket_type"` // "string" or "int" (default: "string")
 }
 
 // MMDBConfig defines MMDB output options.
@@ -181,6 +187,9 @@ func applyDefaults(config *Config) {
 	}
 	if config.Output.Parquet.IPv6BucketSize == 0 {
 		config.Output.Parquet.IPv6BucketSize = 16
+	}
+	if config.Output.Parquet.IPv6BucketType == "" {
+		config.Output.Parquet.IPv6BucketType = IPv6BucketTypeString
 	}
 
 	// MMDB defaults
@@ -373,11 +382,22 @@ func validate(config *Config) error {
 				config.Output.Parquet.IPv4BucketSize,
 			)
 		}
+		// IPv6 bucket size capped at 60 to support int type (60-bit values fit in
+		// positive int64, simplifying BigQuery queries)
 		if config.Output.Parquet.IPv6BucketSize < 1 ||
-			config.Output.Parquet.IPv6BucketSize > 128 {
+			config.Output.Parquet.IPv6BucketSize > 60 {
 			return fmt.Errorf(
-				"ipv6_bucket_size must be between 1 and 128, got %d",
+				"ipv6_bucket_size must be between 1 and 60, got %d",
 				config.Output.Parquet.IPv6BucketSize,
+			)
+		}
+
+		// Validate IPv6 bucket type
+		if config.Output.Parquet.IPv6BucketType != IPv6BucketTypeString &&
+			config.Output.Parquet.IPv6BucketType != IPv6BucketTypeInt {
+			return fmt.Errorf(
+				"ipv6_bucket_type must be 'string' or 'int', got '%s'",
+				config.Output.Parquet.IPv6BucketType,
 			)
 		}
 	}

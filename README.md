@@ -440,8 +440,9 @@ ipv4_file = "geoip-v4.parquet"
 ipv6_file = "geoip-v6.parquet"
 
 [output.parquet]
-ipv4_bucket_size = 16  # Optional, defaults to 16
-ipv6_bucket_size = 16  # Optional, defaults to 16
+ipv4_bucket_size = 16     # Optional, defaults to 16
+ipv6_bucket_size = 16     # Optional, defaults to 16
+ipv6_bucket_type = "int"  # Optional: "string" (default) or "int"
 
 [[network.columns]]
 name = "start_int"
@@ -456,9 +457,9 @@ name = "network_bucket"
 type = "network_bucket"
 ```
 
-For IPv4, the bucket is an integer (matching `start_int`/`end_int`). For IPv6,
-the bucket is a hex string (e.g., "200f0000000000000000000000000000"). This
-requires split output files. See
+For IPv4, the bucket is an integer. For IPv6, the bucket is either a hex string
+(default) or an integer when `ipv6_bucket_type = "int"` is configured. Using
+`network_bucket` requires split output files. See
 [docs/parquet-queries.md](docs/parquet-queries.md) for BigQuery query examples.
 
 **Note:** When a network is larger than the bucket size (e.g., a /15 with /16

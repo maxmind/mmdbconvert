@@ -84,14 +84,16 @@ compression = "snappy"    # Compression: "none", "snappy", "gzip", "lz4", "zstd"
 row_group_size = 500000   # Rows per row group (default: 500000)
 ipv4_bucket_size = 16     # Bucket prefix length for IPv4 (default: 16)
 ipv6_bucket_size = 16     # Bucket prefix length for IPv6 (default: 16)
+ipv6_bucket_type = "string"  # IPv6 bucket value type: "string" or "int" (default: "string")
 ```
 
-| Option             | Description                                                        | Default  |
-| ------------------ | ------------------------------------------------------------------ | -------- |
-| `compression`      | Compression codec: "none", "snappy", "gzip", "lz4", "zstd"         | "snappy" |
-| `row_group_size`   | Number of rows per row group                                       | 500000   |
-| `ipv4_bucket_size` | Prefix length for IPv4 buckets (when `network_bucket` column used) | 16       |
-| `ipv6_bucket_size` | Prefix length for IPv6 buckets (when `network_bucket` column used) | 16       |
+| Option             | Description                                                                | Default  |
+| ------------------ | -------------------------------------------------------------------------- | -------- |
+| `compression`      | Compression codec: "none", "snappy", "gzip", "lz4", "zstd"                 | "snappy" |
+| `row_group_size`   | Number of rows per row group                                               | 500000   |
+| `ipv4_bucket_size` | Prefix length for IPv4 buckets (1-32, when `network_bucket` column used)   | 16       |
+| `ipv6_bucket_size` | Prefix length for IPv6 buckets (1-60, when `network_bucket` column used)   | 16       |
+| `ipv6_bucket_type` | IPv6 bucket value type: "string" (hex) or "int" (first 60 bits as integer) | "string" |
 
 #### MMDB Options
 
@@ -144,14 +146,14 @@ type = "cidr"       # Output type
 
 **Available types:**
 
-| Type             | Description                                                                                                                                 |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `cidr`           | CIDR notation (e.g., "203.0.113.0/24")                                                                                                      |
-| `start_ip`       | Starting IP address (e.g., "203.0.113.0")                                                                                                   |
-| `end_ip`         | Ending IP address (e.g., "203.0.113.255")                                                                                                   |
-| `start_int`      | Starting IP as integer                                                                                                                      |
-| `end_int`        | Ending IP as integer                                                                                                                        |
-| `network_bucket` | Bucket for efficient lookups. For IPv4: integer (same as `start_int`/`end_int`). For IPv6: hex string. Requires split files (Parquet only). |
+| Type             | Description                                                                                                                                                |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `cidr`           | CIDR notation (e.g., "203.0.113.0/24")                                                                                                                     |
+| `start_ip`       | Starting IP address (e.g., "203.0.113.0")                                                                                                                  |
+| `end_ip`         | Ending IP address (e.g., "203.0.113.255")                                                                                                                  |
+| `start_int`      | Starting IP as integer                                                                                                                                     |
+| `end_int`        | Ending IP as integer                                                                                                                                       |
+| `network_bucket` | Bucket for efficient lookups. IPv4: integer. IPv6: hex string (default) or integer (with `ipv6_bucket_type = "int"`). Requires split files (Parquet only). |
 
 **Default behavior:** If no `[[network.columns]]` sections are defined:
 
