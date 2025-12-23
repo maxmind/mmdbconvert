@@ -5,6 +5,7 @@ lint-flags = "--diff"
 ok-exit-codes = 0
 invoke = "once"
 include = ["**/*.go"]
+exclude = ["testdata/MaxMind-DB/**"]
 
 [commands.golangci-lint]
 type = "both"
@@ -15,11 +16,15 @@ expect-stderr = true
 invoke = "once"
 path-args = "dir"
 include = ["**/*.go"]
+exclude = ["testdata/MaxMind-DB/**"]
 
 [commands.prettier-markdown]
 type = "both"
 include = [
     "**/*.md"
+]
+exclude = [
+    "testdata/MaxMind-DB/**"
 ]
 cmd = [
     "npx",
