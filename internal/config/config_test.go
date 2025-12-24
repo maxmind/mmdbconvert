@@ -366,6 +366,148 @@ path = ["country", "iso_code"]
 				}
 			},
 		},
+		{
+			name: "csv with network_bucket column and split files",
+			toml: `
+[output]
+format = "csv"
+ipv4_file = "output-v4.csv"
+ipv6_file = "output-v6.csv"
+
+[[network.columns]]
+name = "start_int"
+type = "start_int"
+
+[[network.columns]]
+name = "end_int"
+type = "end_int"
+
+[[network.columns]]
+name = "network_bucket"
+type = "network_bucket"
+
+[[databases]]
+name = "geo"
+path = "/path/to/geo.mmdb"
+
+[[columns]]
+name = "country"
+database = "geo"
+path = ["country", "iso_code"]
+`,
+			validate: func(t *testing.T, cfg *Config) {
+				if len(cfg.Network.Columns) != 3 {
+					t.Errorf("expected 3 network columns, got %d", len(cfg.Network.Columns))
+				}
+				if cfg.Network.Columns[2].Type != "network_bucket" {
+					t.Errorf(
+						"expected third network column type=network_bucket, got %s",
+						cfg.Network.Columns[2].Type,
+					)
+				}
+				// Bucket sizes should default to 16
+				if cfg.Output.CSV.IPv4BucketSize != 16 {
+					t.Errorf(
+						"expected IPv4BucketSize=16, got %d",
+						cfg.Output.CSV.IPv4BucketSize,
+					)
+				}
+				if cfg.Output.CSV.IPv6BucketSize != 16 {
+					t.Errorf(
+						"expected IPv6BucketSize=16, got %d",
+						cfg.Output.CSV.IPv6BucketSize,
+					)
+				}
+			},
+		},
+		{
+			name: "csv with custom bucket sizes",
+			toml: `
+[output]
+format = "csv"
+ipv4_file = "output-v4.csv"
+ipv6_file = "output-v6.csv"
+
+[output.csv]
+ipv4_bucket_size = 24
+ipv6_bucket_size = 32
+
+[[network.columns]]
+name = "start_int"
+type = "start_int"
+
+[[network.columns]]
+name = "network_bucket"
+type = "network_bucket"
+
+[[databases]]
+name = "geo"
+path = "/path/to/geo.mmdb"
+
+[[columns]]
+name = "country"
+database = "geo"
+path = ["country", "iso_code"]
+`,
+			validate: func(t *testing.T, cfg *Config) {
+				if cfg.Output.CSV.IPv4BucketSize != 24 {
+					t.Errorf(
+						"expected IPv4BucketSize=24, got %d",
+						cfg.Output.CSV.IPv4BucketSize,
+					)
+				}
+				if cfg.Output.CSV.IPv6BucketSize != 32 {
+					t.Errorf(
+						"expected IPv6BucketSize=32, got %d",
+						cfg.Output.CSV.IPv6BucketSize,
+					)
+				}
+			},
+		},
+		{
+			name: "csv with ipv6_bucket_type int",
+			toml: `
+[output]
+format = "csv"
+ipv4_file = "output-v4.csv"
+ipv6_file = "output-v6.csv"
+
+[output.csv]
+ipv6_bucket_type = "int"
+ipv6_bucket_size = 48
+
+[[network.columns]]
+name = "start_int"
+type = "start_int"
+
+[[network.columns]]
+name = "network_bucket"
+type = "network_bucket"
+
+[[databases]]
+name = "geo"
+path = "/path/to/geo.mmdb"
+
+[[columns]]
+name = "country"
+database = "geo"
+path = ["country", "iso_code"]
+`,
+			validate: func(t *testing.T, cfg *Config) {
+				if cfg.Output.CSV.IPv6BucketType != IPv6BucketTypeInt {
+					t.Errorf(
+						"expected IPv6BucketType='int', got '%s'",
+						cfg.Output.CSV.IPv6BucketType,
+					)
+				}
+				if cfg.Output.CSV.IPv6BucketSize != 48 {
+					t.Errorf(
+						"expected IPv6BucketSize=48, got %d",
+						cfg.Output.CSV.IPv6BucketSize,
+					)
+				}
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -731,12 +873,15 @@ path = ["country", "iso_code"]
 			expectError: "network_bucket column requires split files",
 		},
 		{
-			name: "network_bucket with CSV format",
+			name: "network_bucket with MMDB format",
 			toml: `
 [output]
-format = "csv"
-ipv4_file = "output-v4.csv"
-ipv6_file = "output-v6.csv"
+format = "mmdb"
+file = "output.mmdb"
+
+[output.mmdb]
+database_type = "GeoIP2-City"
+description = { en = "Test" }
 
 [[network.columns]]
 name = "network_bucket"
@@ -751,7 +896,7 @@ name = "country"
 database = "geo"
 path = ["country", "iso_code"]
 `,
-			expectError: "network_bucket column type is only supported for Parquet output",
+			expectError: "network_bucket column type is only supported for CSV and Parquet output",
 		},
 		{
 			name: "duplicate network column names",
@@ -888,6 +1033,84 @@ ipv4_file = "output-v4.parquet"
 ipv6_file = "output-v6.parquet"
 
 [output.parquet]
+ipv6_bucket_type = "invalid"
+
+[[network.columns]]
+name = "network_bucket"
+type = "network_bucket"
+
+[[databases]]
+name = "geo"
+path = "/path/to/geo.mmdb"
+
+[[columns]]
+name = "country"
+database = "geo"
+path = ["country", "iso_code"]
+`,
+			expectError: "ipv6_bucket_type must be 'string' or 'int'",
+		},
+		{
+			name: "csv ipv4_bucket_size too large",
+			toml: `
+[output]
+format = "csv"
+ipv4_file = "output-v4.csv"
+ipv6_file = "output-v6.csv"
+
+[output.csv]
+ipv4_bucket_size = 33
+
+[[network.columns]]
+name = "network_bucket"
+type = "network_bucket"
+
+[[databases]]
+name = "geo"
+path = "/path/to/geo.mmdb"
+
+[[columns]]
+name = "country"
+database = "geo"
+path = ["country", "iso_code"]
+`,
+			expectError: "ipv4_bucket_size must be between 1 and 32",
+		},
+		{
+			name: "csv ipv6_bucket_size too large",
+			toml: `
+[output]
+format = "csv"
+ipv4_file = "output-v4.csv"
+ipv6_file = "output-v6.csv"
+
+[output.csv]
+ipv6_bucket_size = 61
+
+[[network.columns]]
+name = "network_bucket"
+type = "network_bucket"
+
+[[databases]]
+name = "geo"
+path = "/path/to/geo.mmdb"
+
+[[columns]]
+name = "country"
+database = "geo"
+path = ["country", "iso_code"]
+`,
+			expectError: "ipv6_bucket_size must be between 1 and 60",
+		},
+		{
+			name: "csv invalid ipv6_bucket_type",
+			toml: `
+[output]
+format = "csv"
+ipv4_file = "output-v4.csv"
+ipv6_file = "output-v6.csv"
+
+[output.csv]
 ipv6_bucket_type = "invalid"
 
 [[network.columns]]

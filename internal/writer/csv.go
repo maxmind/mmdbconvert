@@ -1,10 +1,10 @@
-// Package writer provides output writers for CSV and Parquet formats.
 package writer
 
 import (
 	"encoding/csv"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math/big"
@@ -19,16 +19,6 @@ import (
 	"github.com/maxmind/mmdbconvert/internal/network"
 )
 
-// Network column type constants.
-const (
-	NetworkColumnCIDR     = "cidr"
-	NetworkColumnStartIP  = "start_ip"
-	NetworkColumnEndIP    = "end_ip"
-	NetworkColumnStartInt = "start_int"
-	NetworkColumnEndInt   = "end_int"
-	NetworkColumnBucket   = "network_bucket"
-)
-
 // CSVWriter writes merged MMDB data to CSV format.
 type CSVWriter struct {
 	writer        *csv.Writer
@@ -36,6 +26,7 @@ type CSVWriter struct {
 	headerWritten bool
 	headerEnabled bool
 	rangeCapable  bool
+	hasBucket     bool       // Whether network_bucket column is configured
 	bigIntPool    *sync.Pool // Pool of big.Int for IPv6 integer conversion
 	rowBatch      [][]string // Batch buffer for rows
 	batchSize     int        // Number of rows to batch before writing
@@ -72,6 +63,7 @@ func NewCSVWriter(w io.Writer, cfg *config.Config) *CSVWriter {
 		headerEnabled: headerEnabled,
 		headerWritten: !headerEnabled,
 		rangeCapable:  rangeCapable,
+		hasBucket:     hasNetworkBucketColumn(cfg),
 		bigIntPool: &sync.Pool{
 			New: func() any {
 				return new(big.Int)
@@ -82,8 +74,68 @@ func NewCSVWriter(w io.Writer, cfg *config.Config) *CSVWriter {
 	}
 }
 
+// getBucketSize returns the bucket prefix length for the given IP version.
+func (w *CSVWriter) getBucketSize(isIPv6 bool) int {
+	if isIPv6 {
+		return w.config.Output.CSV.IPv6BucketSize
+	}
+	return w.config.Output.CSV.IPv4BucketSize
+}
+
 // WriteRow writes a single row with network prefix and column data.
+// If a network_bucket column is configured, this may write multiple rows
+// (one per bucket the network spans).
 func (w *CSVWriter) WriteRow(prefix netip.Prefix, data []mmdbtype.DataType) error {
+	if w.hasBucket {
+		return w.writeRowsWithBucketing(prefix, data)
+	}
+	return w.writeSingleRow(prefix, netip.Prefix{}, data)
+}
+
+// writeRowsWithBucketing writes one row per bucket that the network spans.
+func (w *CSVWriter) writeRowsWithBucketing(
+	prefix netip.Prefix,
+	data []mmdbtype.DataType,
+) error {
+	bucketSize := w.getBucketSize(prefix.Addr().Is6())
+
+	buckets, err := network.SplitPrefix(prefix, bucketSize)
+	if err != nil {
+		return fmt.Errorf("splitting prefix into buckets: %w", err)
+	}
+
+	for _, bucket := range buckets {
+		// Truncate to the bucket size boundary for the bucket column value.
+		//
+		// SplitPrefix returns the network unchanged when it's smaller than the
+		// bucket size (e.g., 1.2.3.0/24 with /16 buckets returns [1.2.3.0/24]).
+		// This is correct for determining row count (1 row), but queries compute
+		// buckets as NET.IP_TRUNC(ip, 16) = 1.2.0.0, so we must store 1.2.0.0,
+		// not 1.2.3.0. Without this truncation, queries would fail to find the
+		// network.
+		//
+		// For networks larger than the bucket size (e.g., 2.0.0.0/15 with /16
+		// buckets), SplitPrefix returns [2.0.0.0/16, 2.1.0.0/16] which are
+		// already bucket-aligned, so Masked() is a no-op.
+		bucketPrefix := bucket
+		if bucket.Bits() > bucketSize {
+			bucketPrefix = netip.PrefixFrom(bucket.Addr(), bucketSize).Masked()
+		}
+
+		if err := w.writeSingleRow(prefix, bucketPrefix, data); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// writeSingleRow writes a single row with the given prefix and optional bucket.
+// If bucket.IsValid() is false, the bucket column is not written.
+func (w *CSVWriter) writeSingleRow(
+	prefix netip.Prefix,
+	bucket netip.Prefix,
+	data []mmdbtype.DataType,
+) error {
 	if err := w.ensureHeader(); err != nil {
 		return err
 	}
@@ -93,7 +145,7 @@ func (w *CSVWriter) WriteRow(prefix netip.Prefix, data []mmdbtype.DataType) erro
 
 	// Add network column values
 	for _, netCol := range w.config.Network.Columns {
-		value, err := w.generateNetworkColumnValue(prefix, netCol.Type)
+		value, err := w.generateNetworkColumnValue(prefix, bucket, netCol.Type)
 		if err != nil {
 			return fmt.Errorf("generating network column '%s': %w", netCol.Name, err)
 		}
@@ -225,8 +277,10 @@ func (w *CSVWriter) ensureHeader() error {
 }
 
 // generateNetworkColumnValue generates the value for a network column.
+// bucket is only used for NetworkColumnBucket; for other column types it is ignored.
 func (w *CSVWriter) generateNetworkColumnValue(
 	prefix netip.Prefix,
+	bucket netip.Prefix,
 	colType string,
 ) (string, error) {
 	addr := prefix.Addr()
@@ -254,6 +308,24 @@ func (w *CSVWriter) generateNetworkColumnValue(
 			return strconv.FormatUint(uint64(network.IPv4ToUint32(endIP)), 10), nil
 		}
 		return w.formatIPv6AsInt(endIP), nil
+
+	case NetworkColumnBucket:
+		if !bucket.IsValid() {
+			return "", errors.New("invalid bucket but network_bucket column requested")
+		}
+		bucketAddr := bucket.Addr()
+		if bucketAddr.Is4() {
+			return strconv.FormatUint(uint64(network.IPv4ToUint32(bucketAddr)), 10), nil
+		}
+		// IPv6: hex string by default, decimal int when configured
+		if w.config.Output.CSV.IPv6BucketType != config.IPv6BucketTypeInt {
+			return fmt.Sprintf("%x", bucketAddr.As16()), nil
+		}
+		val, err := network.IPv6BucketToInt64(bucketAddr)
+		if err != nil {
+			return "", fmt.Errorf("converting IPv6 bucket to int64: %w", err)
+		}
+		return strconv.FormatInt(val, 10), nil
 
 	default:
 		return "", fmt.Errorf("unknown network column type: %s", colType)

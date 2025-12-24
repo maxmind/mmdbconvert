@@ -96,16 +96,6 @@ func (w *ParquetWriter) WriteRow(prefix netip.Prefix, data []mmdbtype.DataType) 
 	return w.writeSingleRow(prefix, netip.Prefix{}, data)
 }
 
-// hasNetworkBucketColumn returns true if a network_bucket column is configured.
-func hasNetworkBucketColumn(cfg *config.Config) bool {
-	for _, col := range cfg.Network.Columns {
-		if col.Type == NetworkColumnBucket {
-			return true
-		}
-	}
-	return false
-}
-
 // getBucketSize returns the bucket prefix length for the given IP version.
 func (w *ParquetWriter) getBucketSize(isIPv6 bool) int {
 	if isIPv6 {

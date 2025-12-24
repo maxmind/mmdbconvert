@@ -46,8 +46,11 @@ type OutputConfig struct {
 
 // CSVConfig defines CSV output options.
 type CSVConfig struct {
-	Delimiter     string `toml:"delimiter"`      // Field delimiter (default: ",")
-	IncludeHeader *bool  `toml:"include_header"` // Include column headers (default: true)
+	Delimiter      string `toml:"delimiter"`        // Field delimiter (default: ",")
+	IncludeHeader  *bool  `toml:"include_header"`   // Include column headers (default: true)
+	IPv4BucketSize int    `toml:"ipv4_bucket_size"` // Bucket prefix length for IPv4 (default: 16)
+	IPv6BucketSize int    `toml:"ipv6_bucket_size"` // Bucket prefix length for IPv6 (default: 16)
+	IPv6BucketType string `toml:"ipv6_bucket_type"` // "string" or "int" (default: "string")
 }
 
 // ParquetConfig defines Parquet output options.
@@ -173,6 +176,15 @@ func applyDefaults(config *Config) {
 	}
 	if config.Output.CSV.IncludeHeader == nil {
 		config.Output.CSV.IncludeHeader = boolPtr(true)
+	}
+	if config.Output.CSV.IPv4BucketSize == 0 {
+		config.Output.CSV.IPv4BucketSize = 16
+	}
+	if config.Output.CSV.IPv6BucketSize == 0 {
+		config.Output.CSV.IPv6BucketSize = 16
+	}
+	if config.Output.CSV.IPv6BucketType == "" {
+		config.Output.CSV.IPv6BucketType = IPv6BucketTypeString
 	}
 
 	// Parquet defaults
@@ -360,9 +372,9 @@ func validate(config *Config) error {
 	}
 
 	if hasBucketColumn {
-		if config.Output.Format != formatParquet {
+		if config.Output.Format == formatMMDB {
 			return errors.New(
-				"network_bucket column type is only supported for Parquet output",
+				"network_bucket column type is only supported for CSV and Parquet output",
 			)
 		}
 
@@ -374,31 +386,8 @@ func validate(config *Config) error {
 			)
 		}
 
-		// Validate bucket sizes when network_bucket column is used
-		if config.Output.Parquet.IPv4BucketSize < 1 ||
-			config.Output.Parquet.IPv4BucketSize > 32 {
-			return fmt.Errorf(
-				"ipv4_bucket_size must be between 1 and 32, got %d",
-				config.Output.Parquet.IPv4BucketSize,
-			)
-		}
-		// IPv6 bucket size capped at 60 to support int type (60-bit values fit in
-		// positive int64, simplifying BigQuery queries)
-		if config.Output.Parquet.IPv6BucketSize < 1 ||
-			config.Output.Parquet.IPv6BucketSize > 60 {
-			return fmt.Errorf(
-				"ipv6_bucket_size must be between 1 and 60, got %d",
-				config.Output.Parquet.IPv6BucketSize,
-			)
-		}
-
-		// Validate IPv6 bucket type
-		if config.Output.Parquet.IPv6BucketType != IPv6BucketTypeString &&
-			config.Output.Parquet.IPv6BucketType != IPv6BucketTypeInt {
-			return fmt.Errorf(
-				"ipv6_bucket_type must be 'string' or 'int', got '%s'",
-				config.Output.Parquet.IPv6BucketType,
-			)
+		if err := validateBucketConfig(config); err != nil {
+			return err
 		}
 	}
 
@@ -447,6 +436,47 @@ func validate(config *Config) error {
 		dataColNames[col.Name] = true
 
 		// Empty output_path is allowed - it means merge into root for MMDB output
+	}
+
+	return nil
+}
+
+// validateBucketConfig validates bucket configuration for CSV or Parquet output.
+func validateBucketConfig(config *Config) error {
+	var ipv4BucketSize, ipv6BucketSize int
+	var ipv6BucketType string
+
+	if config.Output.Format == formatCSV {
+		ipv4BucketSize = config.Output.CSV.IPv4BucketSize
+		ipv6BucketSize = config.Output.CSV.IPv6BucketSize
+		ipv6BucketType = config.Output.CSV.IPv6BucketType
+	} else {
+		ipv4BucketSize = config.Output.Parquet.IPv4BucketSize
+		ipv6BucketSize = config.Output.Parquet.IPv6BucketSize
+		ipv6BucketType = config.Output.Parquet.IPv6BucketType
+	}
+
+	if ipv4BucketSize < 1 || ipv4BucketSize > 32 {
+		return fmt.Errorf(
+			"ipv4_bucket_size must be between 1 and 32, got %d",
+			ipv4BucketSize,
+		)
+	}
+
+	// IPv6 bucket size capped at 60 to support int type (60-bit values fit in
+	// positive int64, simplifying BigQuery queries)
+	if ipv6BucketSize < 1 || ipv6BucketSize > 60 {
+		return fmt.Errorf(
+			"ipv6_bucket_size must be between 1 and 60, got %d",
+			ipv6BucketSize,
+		)
+	}
+
+	if ipv6BucketType != IPv6BucketTypeString && ipv6BucketType != IPv6BucketTypeInt {
+		return fmt.Errorf(
+			"ipv6_bucket_type must be 'string' or 'int', got '%s'",
+			ipv6BucketType,
+		)
 	}
 
 	return nil

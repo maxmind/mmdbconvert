@@ -2,7 +2,10 @@ package writer
 
 import (
 	"bytes"
+	"encoding/csv"
+	"math/big"
 	"net/netip"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -11,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/maxmind/mmdbconvert/internal/config"
+	"github.com/maxmind/mmdbconvert/internal/network"
 )
 
 func TestCSVWriter_SingleRow(t *testing.T) {
@@ -496,4 +500,422 @@ func TestConvertToString(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+func TestCSVWriter_NetworkBucket_IPv4(t *testing.T) {
+	tests := []struct {
+		name             string
+		network          string
+		bucketSize       int
+		expectedRowCount int
+		expectedBuckets  []string
+		expectedStartInt string
+		expectedEndInt   string
+	}{
+		{
+			name:             "no split - /24 in /16 bucket",
+			network:          "1.2.3.0/24",
+			bucketSize:       16,
+			expectedRowCount: 1,
+			expectedBuckets:  []string{csvIPv4ToInt("1.2.0.0")},
+			expectedStartInt: csvIPv4ToInt("1.2.3.0"),
+			expectedEndInt:   csvIPv4ToInt("1.2.3.255"),
+		},
+		{
+			name:             "split - /15 into two /16 buckets",
+			network:          "2.0.0.0/15",
+			bucketSize:       16,
+			expectedRowCount: 2,
+			expectedBuckets: []string{
+				csvIPv4ToInt("2.0.0.0"),
+				csvIPv4ToInt("2.1.0.0"),
+			},
+			expectedStartInt: csvIPv4ToInt("2.0.0.0"),
+			expectedEndInt:   csvIPv4ToInt("2.1.255.255"),
+		},
+		{
+			name:             "large split - /12 into 16 /16 buckets",
+			network:          "1.0.0.0/12",
+			bucketSize:       16,
+			expectedRowCount: 16,
+			expectedBuckets: []string{
+				csvIPv4ToInt("1.0.0.0"),
+				csvIPv4ToInt("1.1.0.0"),
+				csvIPv4ToInt("1.2.0.0"),
+				csvIPv4ToInt("1.3.0.0"),
+				csvIPv4ToInt("1.4.0.0"),
+				csvIPv4ToInt("1.5.0.0"),
+				csvIPv4ToInt("1.6.0.0"),
+				csvIPv4ToInt("1.7.0.0"),
+				csvIPv4ToInt("1.8.0.0"),
+				csvIPv4ToInt("1.9.0.0"),
+				csvIPv4ToInt("1.10.0.0"),
+				csvIPv4ToInt("1.11.0.0"),
+				csvIPv4ToInt("1.12.0.0"),
+				csvIPv4ToInt("1.13.0.0"),
+				csvIPv4ToInt("1.14.0.0"),
+				csvIPv4ToInt("1.15.0.0"),
+			},
+			expectedStartInt: csvIPv4ToInt("1.0.0.0"),
+			expectedEndInt:   csvIPv4ToInt("1.15.255.255"),
+		},
+		{
+			name:             "custom bucket size - /23 into /24 buckets",
+			network:          "1.2.0.0/23",
+			bucketSize:       24,
+			expectedRowCount: 2,
+			expectedBuckets: []string{
+				csvIPv4ToInt("1.2.0.0"),
+				csvIPv4ToInt("1.2.1.0"),
+			},
+			expectedStartInt: csvIPv4ToInt("1.2.0.0"),
+			expectedEndInt:   csvIPv4ToInt("1.2.1.255"),
+		},
+		{
+			name:             "single IP /32",
+			network:          "192.168.1.100/32",
+			bucketSize:       16,
+			expectedRowCount: 1,
+			expectedBuckets:  []string{csvIPv4ToInt("192.168.0.0")},
+			expectedStartInt: csvIPv4ToInt("192.168.1.100"),
+			expectedEndInt:   csvIPv4ToInt("192.168.1.100"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			buf := &bytes.Buffer{}
+
+			cfg := &config.Config{
+				Output: config.OutputConfig{
+					CSV: config.CSVConfig{
+						Delimiter:      ",",
+						IPv4BucketSize: tt.bucketSize,
+					},
+				},
+				Network: config.NetworkConfig{
+					Columns: []config.NetworkColumn{
+						{Name: "start_int", Type: "start_int"},
+						{Name: "end_int", Type: "end_int"},
+						{Name: "network_bucket", Type: "network_bucket"},
+					},
+				},
+				Columns: []config.Column{{Name: "country", Type: "string"}},
+			}
+
+			writer := NewCSVWriter(buf, cfg)
+
+			prefix := netip.MustParsePrefix(tt.network)
+			err := writer.WriteRow(prefix, []mmdbtype.DataType{mmdbtype.String("XX")})
+			require.NoError(t, err)
+
+			err = writer.Flush()
+			require.NoError(t, err)
+
+			rows := readCSVRows(t, buf)
+			require.Len(t, rows, tt.expectedRowCount)
+
+			for i, row := range rows {
+				assert.Equal(t, tt.expectedBuckets[i], row["network_bucket"])
+				assert.Equal(t, tt.expectedStartInt, row["start_int"])
+				assert.Equal(t, tt.expectedEndInt, row["end_int"])
+				assert.Equal(t, "XX", row["country"])
+			}
+		})
+	}
+}
+
+func TestCSVWriter_NetworkBucket_IPv6(t *testing.T) {
+	tests := []struct {
+		name             string
+		network          string
+		bucketSize       int
+		expectedRowCount int
+		expectedBuckets  []string
+		expectedStartInt string
+		expectedEndInt   string
+	}{
+		{
+			name:             "no split - /24 in /16 bucket",
+			network:          "2001:0d00::/24",
+			bucketSize:       16,
+			expectedRowCount: 1,
+			expectedBuckets:  []string{"20010000000000000000000000000000"},
+			expectedStartInt: csvIPv6ToInt("2001:0d00::"),
+			expectedEndInt:   csvIPv6ToInt("2001:0dff:ffff:ffff:ffff:ffff:ffff:ffff"),
+		},
+		{
+			name:             "split - /15 into two /16 buckets",
+			network:          "abcc::/15",
+			bucketSize:       16,
+			expectedRowCount: 2,
+			expectedBuckets: []string{
+				"abcc0000000000000000000000000000",
+				"abcd0000000000000000000000000000",
+			},
+			expectedStartInt: csvIPv6ToInt("abcc::"),
+			expectedEndInt:   csvIPv6ToInt("abcd:ffff:ffff:ffff:ffff:ffff:ffff:ffff"),
+		},
+		{
+			name:             "large split - /12 into 16 /16 buckets",
+			network:          "2000::/12",
+			bucketSize:       16,
+			expectedRowCount: 16,
+			expectedBuckets: []string{
+				"20000000000000000000000000000000",
+				"20010000000000000000000000000000",
+				"20020000000000000000000000000000",
+				"20030000000000000000000000000000",
+				"20040000000000000000000000000000",
+				"20050000000000000000000000000000",
+				"20060000000000000000000000000000",
+				"20070000000000000000000000000000",
+				"20080000000000000000000000000000",
+				"20090000000000000000000000000000",
+				"200a0000000000000000000000000000",
+				"200b0000000000000000000000000000",
+				"200c0000000000000000000000000000",
+				"200d0000000000000000000000000000",
+				"200e0000000000000000000000000000",
+				"200f0000000000000000000000000000",
+			},
+			expectedStartInt: csvIPv6ToInt("2000::"),
+			expectedEndInt:   csvIPv6ToInt("200f:ffff:ffff:ffff:ffff:ffff:ffff:ffff"),
+		},
+		{
+			name:             "custom bucket size - /23 into /24 buckets",
+			network:          "2001:0000::/23",
+			bucketSize:       24,
+			expectedRowCount: 2,
+			expectedBuckets: []string{
+				"20010000000000000000000000000000",
+				"20010100000000000000000000000000",
+			},
+			expectedStartInt: csvIPv6ToInt("2001::"),
+			expectedEndInt:   csvIPv6ToInt("2001:01ff:ffff:ffff:ffff:ffff:ffff:ffff"),
+		},
+		{
+			name:             "single IP /128",
+			network:          "2001:db8::1/128",
+			bucketSize:       16,
+			expectedRowCount: 1,
+			expectedBuckets:  []string{"20010000000000000000000000000000"},
+			expectedStartInt: csvIPv6ToInt("2001:db8::1"),
+			expectedEndInt:   csvIPv6ToInt("2001:db8::1"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			buf := &bytes.Buffer{}
+
+			cfg := &config.Config{
+				Output: config.OutputConfig{
+					CSV: config.CSVConfig{
+						Delimiter:      ",",
+						IPv6BucketSize: tt.bucketSize,
+					},
+				},
+				Network: config.NetworkConfig{
+					Columns: []config.NetworkColumn{
+						{Name: "start_int", Type: "start_int"},
+						{Name: "end_int", Type: "end_int"},
+						{Name: "network_bucket", Type: "network_bucket"},
+					},
+				},
+				Columns: []config.Column{{Name: "country", Type: "string"}},
+			}
+
+			writer := NewCSVWriter(buf, cfg)
+
+			prefix := netip.MustParsePrefix(tt.network)
+			err := writer.WriteRow(prefix, []mmdbtype.DataType{mmdbtype.String("XX")})
+			require.NoError(t, err)
+
+			err = writer.Flush()
+			require.NoError(t, err)
+
+			rows := readCSVRows(t, buf)
+			require.Len(t, rows, tt.expectedRowCount)
+
+			for i, row := range rows {
+				assert.Equal(t, tt.expectedBuckets[i], row["network_bucket"])
+				assert.Equal(t, tt.expectedStartInt, row["start_int"])
+				assert.Equal(t, tt.expectedEndInt, row["end_int"])
+				assert.Equal(t, "XX", row["country"])
+			}
+		})
+	}
+}
+
+func TestCSVWriter_NetworkBucket_IPv6_Int(t *testing.T) {
+	tests := []struct {
+		name             string
+		network          string
+		bucketSize       int
+		expectedRowCount int
+		expectedBuckets  []string
+		expectedStartInt string
+		expectedEndInt   string
+	}{
+		{
+			name:             "no split - /24 in /16 bucket",
+			network:          "2001:0d00::/24",
+			bucketSize:       16,
+			expectedRowCount: 1,
+			expectedBuckets:  []string{csvIPv6BucketToInt("2001::")},
+			expectedStartInt: csvIPv6ToInt("2001:0d00::"),
+			expectedEndInt:   csvIPv6ToInt("2001:0dff:ffff:ffff:ffff:ffff:ffff:ffff"),
+		},
+		{
+			name:             "split - /15 into two /16 buckets",
+			network:          "abcc::/15",
+			bucketSize:       16,
+			expectedRowCount: 2,
+			expectedBuckets: []string{
+				csvIPv6BucketToInt("abcc::"),
+				csvIPv6BucketToInt("abcd::"),
+			},
+			expectedStartInt: csvIPv6ToInt("abcc::"),
+			expectedEndInt:   csvIPv6ToInt("abcd:ffff:ffff:ffff:ffff:ffff:ffff:ffff"),
+		},
+		{
+			name:             "large split - /12 into 16 /16 buckets",
+			network:          "2000::/12",
+			bucketSize:       16,
+			expectedRowCount: 16,
+			expectedBuckets: []string{
+				csvIPv6BucketToInt("2000::"),
+				csvIPv6BucketToInt("2001::"),
+				csvIPv6BucketToInt("2002::"),
+				csvIPv6BucketToInt("2003::"),
+				csvIPv6BucketToInt("2004::"),
+				csvIPv6BucketToInt("2005::"),
+				csvIPv6BucketToInt("2006::"),
+				csvIPv6BucketToInt("2007::"),
+				csvIPv6BucketToInt("2008::"),
+				csvIPv6BucketToInt("2009::"),
+				csvIPv6BucketToInt("200a::"),
+				csvIPv6BucketToInt("200b::"),
+				csvIPv6BucketToInt("200c::"),
+				csvIPv6BucketToInt("200d::"),
+				csvIPv6BucketToInt("200e::"),
+				csvIPv6BucketToInt("200f::"),
+			},
+			expectedStartInt: csvIPv6ToInt("2000::"),
+			expectedEndInt:   csvIPv6ToInt("200f:ffff:ffff:ffff:ffff:ffff:ffff:ffff"),
+		},
+		{
+			name:             "custom bucket size - /23 into /24 buckets",
+			network:          "2001:0000::/23",
+			bucketSize:       24,
+			expectedRowCount: 2,
+			expectedBuckets: []string{
+				csvIPv6BucketToInt("2001::"),
+				csvIPv6BucketToInt("2001:100::"),
+			},
+			expectedStartInt: csvIPv6ToInt("2001::"),
+			expectedEndInt:   csvIPv6ToInt("2001:01ff:ffff:ffff:ffff:ffff:ffff:ffff"),
+		},
+		{
+			name:             "single IP /128",
+			network:          "2001:db8::1/128",
+			bucketSize:       16,
+			expectedRowCount: 1,
+			expectedBuckets:  []string{csvIPv6BucketToInt("2001::")},
+			expectedStartInt: csvIPv6ToInt("2001:db8::1"),
+			expectedEndInt:   csvIPv6ToInt("2001:db8::1"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			buf := &bytes.Buffer{}
+
+			cfg := &config.Config{
+				Output: config.OutputConfig{
+					CSV: config.CSVConfig{
+						Delimiter:      ",",
+						IPv6BucketSize: tt.bucketSize,
+						IPv6BucketType: config.IPv6BucketTypeInt,
+					},
+				},
+				Network: config.NetworkConfig{
+					Columns: []config.NetworkColumn{
+						{Name: "start_int", Type: "start_int"},
+						{Name: "end_int", Type: "end_int"},
+						{Name: "network_bucket", Type: "network_bucket"},
+					},
+				},
+				Columns: []config.Column{{Name: "country", Type: "string"}},
+			}
+
+			writer := NewCSVWriter(buf, cfg)
+
+			prefix := netip.MustParsePrefix(tt.network)
+			err := writer.WriteRow(prefix, []mmdbtype.DataType{mmdbtype.String("XX")})
+			require.NoError(t, err)
+
+			err = writer.Flush()
+			require.NoError(t, err)
+
+			rows := readCSVRows(t, buf)
+			require.Len(t, rows, tt.expectedRowCount)
+
+			for i, row := range rows {
+				assert.Equal(t, tt.expectedBuckets[i], row["network_bucket"])
+				assert.Equal(t, tt.expectedStartInt, row["start_int"])
+				assert.Equal(t, tt.expectedEndInt, row["end_int"])
+				assert.Equal(t, "XX", row["country"])
+			}
+		})
+	}
+}
+
+// readCSVRows reads all data rows from a CSV buffer into a slice of maps.
+// The first row is treated as headers.
+func readCSVRows(t *testing.T, buf *bytes.Buffer) []map[string]string {
+	t.Helper()
+	reader := csv.NewReader(strings.NewReader(buf.String()))
+
+	records, err := reader.ReadAll()
+	require.NoError(t, err)
+	require.NotEmpty(t, records)
+
+	headers := records[0]
+	rows := make([]map[string]string, 0, len(records)-1)
+
+	for _, record := range records[1:] {
+		row := make(map[string]string, len(headers))
+		for j, header := range headers {
+			row[header] = record[j]
+		}
+		rows = append(rows, row)
+	}
+	return rows
+}
+
+// csvIPv4ToInt converts an IPv4 address string to its decimal string representation.
+func csvIPv4ToInt(s string) string {
+	ip := netip.MustParseAddr(s)
+	return strconv.FormatUint(uint64(network.IPv4ToUint32(ip)), 10)
+}
+
+// csvIPv6ToInt converts an IPv6 address to its full decimal string representation.
+func csvIPv6ToInt(s string) string {
+	ip := netip.MustParseAddr(s)
+	b := ip.As16()
+	var i big.Int
+	i.SetBytes(b[:])
+	return i.String()
+}
+
+// csvIPv6BucketToInt converts an IPv6 bucket address string to its 60-bit decimal string.
+func csvIPv6BucketToInt(s string) string {
+	ip := netip.MustParseAddr(s)
+	val, err := network.IPv6BucketToInt64(ip)
+	if err != nil {
+		panic(err)
+	}
+	return strconv.FormatInt(val, 10)
 }

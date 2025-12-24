@@ -423,7 +423,7 @@ split your output into separate IPv4/IPv6 files via `output.ipv4_file` and
 `output.ipv6_file`. For single-file outputs that include IPv6 data, use string
 columns (`start_ip`, `end_ip`, `cidr`).
 
-**Note:** `network_bucket` is currently only supported for Parquet output.
+**Note:** `network_bucket` is supported for CSV and Parquet output.
 
 ### Network Bucketing for Analytics (BigQuery, etc.)
 
@@ -466,7 +466,7 @@ For IPv4, the bucket is an integer. For IPv6, the bucket is either a hex string
 buckets), the row is duplicated for each bucket it spans. This ensures queries
 find the correct network regardless of which bucket the IP falls into.
 
-**Note:** `network_bucket` is currently only supported for Parquet output.
+**Note:** `network_bucket` is supported for CSV and Parquet output.
 
 ### Data Type Hints
 
