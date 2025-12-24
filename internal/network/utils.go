@@ -21,15 +21,15 @@ func IPv4ToUint32(addr netip.Addr) uint32 {
 
 // IPv6BucketToInt64 converts the first 60 bits of an IPv6 address to int64.
 //
-// This is used for IPv6 bucket values where the address has been masked to
-// the bucket boundary (trailing bits are zero).
-//
-// NOTE: The address must already be masked to the appropriate bucket (i.e.,
-// if you have a bucket size of /16, you must provide 2001:: as opposed to
+// NOTE: The address must already be masked to the appropriate bucket (i.e., if
+// you have a bucket size of /16, you must provide 2001:: as opposed to
 // something like 2001:abcd::).
 //
-// We use 60 bits (not 64) because 60-bit values always fit in a positive int64,
-// which simplifies BigQuery queries (no two's complement handling needed).
+// We use 60 bits (not 64) because 60-bit values always fit in a positive
+// int64, which simplifies queries (no two's complement handling needed).
+//
+// We use 60 bits in particular as that is what 15 hex characters provides.
+// This is already more bits than we'd typically need.
 //
 // In BigQuery, you can compute the same value using:
 //

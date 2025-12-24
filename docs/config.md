@@ -144,6 +144,33 @@ ipv6_file = "merged_ipv6.parquet"
 
 When splitting output, both `ipv4_file` and `ipv6_file` must be configured.
 
+#### IPv6 Bucket Type Options
+
+IPv6 buckets can be stored as either hex strings (default) or int64 values:
+
+**String type (default):**
+
+- Format: 32-character hex string (e.g., "20010db8000000000000000000000000")
+- Storage: 32 bytes per value
+
+**Int type (`ipv6_bucket_type = "int"`):**
+
+- Format: First 60 bits of the bucket address as int64
+- Storage: 8 bytes per value (4x smaller than string)
+
+We use 60 bits (not 64) because 60-bit values always fit in a positive int64,
+which simplifies queries by avoiding two's complement handling.
+
+**When to use each type:**
+
+- Use **string** (default) for databases where hex string representations are
+  simpler to work with.
+- Use **int** for reduced storage cost at the price of more complicated queries.
+
+We do not provide a `bytes` type for the IPv6 bucket. Primarily this is because
+there so far has not been a need. For example, BigQuery cannot cluster on
+`bytes`, so it is not helpful there.
+
 ### Network Columns
 
 Network columns define how IP network information is output. These columns

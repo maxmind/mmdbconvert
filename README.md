@@ -423,8 +423,6 @@ split your output into separate IPv4/IPv6 files via `output.ipv4_file` and
 `output.ipv6_file`. For single-file outputs that include IPv6 data, use string
 columns (`start_ip`, `end_ip`, `cidr`).
 
-**Note:** `network_bucket` is supported for CSV and Parquet output.
-
 ### Network Bucketing for Analytics (BigQuery, etc.)
 
 When loading network data into analytics platforms like BigQuery, range queries
@@ -457,10 +455,13 @@ name = "network_bucket"
 type = "network_bucket"
 ```
 
-For IPv4, the bucket is an integer. For IPv6, the bucket is either a hex string
-(default) or an integer when `ipv6_bucket_type = "int"` is configured. Using
-`network_bucket` requires split output files. See
-[docs/parquet-queries.md](docs/parquet-queries.md) for BigQuery query examples.
+For IPv4, the bucket is a 32-bit integer. For IPv6, the bucket is either a hex
+string (default) or a 60-bit integer when `ipv6_bucket_type = "int"` is
+configured.
+
+Using `network_bucket` requires split output files.
+
+See [docs/bigquery.md](docs/bigquery.md) for BigQuery query examples.
 
 **Note:** When a network is larger than the bucket size (e.g., a /15 with /16
 buckets), the row is duplicated for each bucket it spans. This ensures queries
@@ -576,6 +577,7 @@ This ensures accurate IP lookups with no ambiguity.
 
 - [Configuration Reference](docs/config.md) - Complete config file documentation
 - [Parquet Query Guide](docs/parquet-queries.md) - Optimizing IP lookup queries
+- [BigQuery Guide](docs/bigquery.md) - Network bucketing for BigQuery
 
 ## Requirements
 
