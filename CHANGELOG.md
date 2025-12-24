@@ -10,11 +10,22 @@ and this project adheres to
 
 ### Added
 
-- Parquet sorting column metadata for query optimization. When start_int
-  columns are configured, mmdbconvert now writes sorting metadata to the
-  Parquet file declaring that rows are sorted by start_int in ascending order.
-  This enables query engines like DuckDB, Spark, and Trino to use the sort
-  order for potential optimizations like binary search.
+- Parquet sorting column metadata for query optimization. When start_int columns
+  are configured, mmdbconvert now writes sorting metadata to the Parquet file
+  declaring that rows are sorted by start_int in ascending order. This enables
+  query engines like DuckDB, Spark, and Trino to use the sort order for
+  potential optimizations like binary search.
+- New `network_bucket` network column type for CSV and Parquet output, enabling
+  efficient IP lookups in BigQuery and other analytics platforms. When a network
+  spans multiple buckets, rows are duplicated with different bucket values while
+  preserving original network info. For IPv4, the bucket is an integer. For
+  IPv6, the bucket is either a hex string (e.g.,
+  "200f0000000000000000000000000000") or an integer depending on
+  `ipv6_bucket_type`. Requires split output files (`ipv4_file` and `ipv6_file`).
+- New CSV and Parquet options `ipv4_bucket_size` and `ipv6_bucket_size` to
+  configure bucket prefix lengths (default: 16).
+- New CSV and Parquet option `ipv6_bucket_type` to configure the IPv6 network
+  bucket column format (default: string).
 
 ## [0.1.0] - 2025-11-07
 

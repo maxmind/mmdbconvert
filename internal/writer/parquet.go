@@ -37,6 +37,7 @@ type ParquetWriter struct {
 	rowGroupSize int
 	rowCount     int
 	ipVersion    int
+	hasBucket    bool
 }
 
 // NewParquetWriter creates a new Parquet writer.
@@ -81,17 +82,78 @@ func NewParquetWriterWithIPVersion(
 		schema:       schema,
 		rowGroupSize: cfg.Output.Parquet.RowGroupSize,
 		ipVersion:    ipVersion,
+		hasBucket:    hasNetworkBucketColumn(cfg),
 	}, nil
 }
 
 // WriteRow writes a single row with network prefix and column data.
+// If a network_bucket column is configured, this may write multiple rows
+// (one per bucket the network spans).
 func (w *ParquetWriter) WriteRow(prefix netip.Prefix, data []mmdbtype.DataType) error {
+	if w.hasBucket {
+		return w.writeRowsWithBucketing(prefix, data)
+	}
+	return w.writeSingleRow(prefix, netip.Prefix{}, data)
+}
+
+// getBucketSize returns the bucket prefix length for the given IP version.
+func (w *ParquetWriter) getBucketSize(isIPv6 bool) int {
+	if isIPv6 {
+		return w.config.Output.Parquet.IPv6BucketSize
+	}
+	return w.config.Output.Parquet.IPv4BucketSize
+}
+
+// writeRowsWithBucketing writes one row per bucket that the network spans.
+func (w *ParquetWriter) writeRowsWithBucketing(
+	prefix netip.Prefix,
+	data []mmdbtype.DataType,
+) error {
+	bucketSize := w.getBucketSize(prefix.Addr().Is6())
+
+	buckets, err := network.SplitPrefix(prefix, bucketSize)
+	if err != nil {
+		return fmt.Errorf("splitting prefix into buckets: %w", err)
+	}
+
+	for _, bucket := range buckets {
+		// Truncate to the bucket size boundary for the bucket column value.
+		//
+		// SplitPrefix returns the network unchanged when it's smaller than the
+		// bucket size (e.g., 1.2.3.0/24 with /16 buckets returns [1.2.3.0/24]).
+		// This is correct for determining row count (1 row), but queries compute
+		// buckets as NET.IP_TRUNC(ip, 16) = 1.2.0.0, so we must store 1.2.0.0,
+		// not 1.2.3.0. Without this truncation, queries would fail to find the
+		// network.
+		//
+		// For networks larger than the bucket size (e.g., 2.0.0.0/15 with /16
+		// buckets), SplitPrefix returns [2.0.0.0/16, 2.1.0.0/16] which are
+		// already bucket-aligned, so Masked() is a no-op.
+		bucketPrefix := bucket
+		if bucket.Bits() > bucketSize {
+			bucketPrefix = netip.PrefixFrom(bucket.Addr(), bucketSize).Masked()
+		}
+
+		if err := w.writeSingleRow(prefix, bucketPrefix, data); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// writeSingleRow writes a single row with the given prefix and optional bucket.
+// If bucket.IsValid() is false, the bucket column is not written.
+func (w *ParquetWriter) writeSingleRow(
+	prefix netip.Prefix,
+	bucket netip.Prefix,
+	data []mmdbtype.DataType,
+) error {
 	// Build row with network columns + data columns
 	row := map[string]any{}
 
 	// Add network column values
 	for _, netCol := range w.config.Network.Columns {
-		value, err := w.generateNetworkColumnValue(prefix, netCol.Type)
+		value, err := w.generateNetworkColumnValue(prefix, bucket, netCol.Type)
 		if err != nil {
 			return fmt.Errorf("generating network column '%s': %w", netCol.Name, err)
 		}
@@ -135,8 +197,10 @@ func (w *ParquetWriter) Flush() error {
 }
 
 // generateNetworkColumnValue generates the value for a network column.
+// bucket is only used for NetworkColumnBucket; for other column types it is ignored.
 func (w *ParquetWriter) generateNetworkColumnValue(
 	prefix netip.Prefix,
+	bucket netip.Prefix,
 	colType string,
 ) (any, error) {
 	addr := prefix.Addr()
@@ -191,6 +255,25 @@ func (w *ParquetWriter) generateNetworkColumnValue(
 			"end_int column type only supports IPv4 unless you configure output.ipv4_file and output.ipv6_file",
 		)
 
+	case NetworkColumnBucket:
+		if !bucket.IsValid() {
+			return nil, errors.New("invalid bucket but network_bucket column requested")
+		}
+		bucketAddr := bucket.Addr()
+		if bucketAddr.Is4() {
+			// IPv4: int64 (same as start_int)
+			return int64(network.IPv4ToUint32(bucketAddr)), nil
+		}
+		// IPv6: hex string by default, int64 when explicitly configured
+		if w.config.Output.Parquet.IPv6BucketType != config.IPv6BucketTypeInt {
+			return fmt.Sprintf("%x", bucketAddr.As16()), nil
+		}
+		val, err := network.IPv6BucketToInt64(bucketAddr)
+		if err != nil {
+			return nil, fmt.Errorf("converting IPv6 bucket to int64: %w", err)
+		}
+		return val, nil
+
 	default:
 		return nil, fmt.Errorf("unknown network column type: %s", colType)
 	}
@@ -202,7 +285,7 @@ func buildSchema(cfg *config.Config, ipVersion int) (*parquet.Schema, error) {
 
 	// Add network columns
 	for _, netCol := range cfg.Network.Columns {
-		node, err := buildNetworkNode(netCol, ipVersion)
+		node, err := buildNetworkNode(netCol, ipVersion, cfg)
 		if err != nil {
 			return nil, fmt.Errorf(
 				"building node for network column '%s': %w",
@@ -227,7 +310,11 @@ func buildSchema(cfg *config.Config, ipVersion int) (*parquet.Schema, error) {
 }
 
 // buildNetworkNode builds a Parquet node for a network column.
-func buildNetworkNode(col config.NetworkColumn, ipVersion int) (parquet.Node, error) {
+func buildNetworkNode(
+	col config.NetworkColumn,
+	ipVersion int,
+	cfg *config.Config,
+) (parquet.Node, error) {
 	switch col.Type {
 	case NetworkColumnCIDR, NetworkColumnStartIP, NetworkColumnEndIP:
 		// String columns
@@ -236,6 +323,14 @@ func buildNetworkNode(col config.NetworkColumn, ipVersion int) (parquet.Node, er
 	case NetworkColumnStartInt, NetworkColumnEndInt:
 		if ipVersion == ipVersion6 {
 			return parquet.Optional(parquet.Leaf(parquet.FixedLenByteArrayType(16))), nil
+		}
+		return parquet.Optional(parquet.Int(64)), nil
+
+	case NetworkColumnBucket:
+		// IPv6 bucket: string (hex) by default, int64 when explicitly configured
+		if ipVersion == ipVersion6 &&
+			cfg.Output.Parquet.IPv6BucketType != config.IPv6BucketTypeInt {
+			return parquet.Optional(parquet.String()), nil
 		}
 		return parquet.Optional(parquet.Int(64)), nil
 

@@ -72,7 +72,18 @@ When `format = "csv"`, you can specify CSV-specific options:
 [output.csv]
 delimiter = ","           # Field delimiter (default: ",")
 include_header = true     # Include column headers (default: true)
+ipv4_bucket_size = 16     # Bucket prefix length for IPv4 (default: 16)
+ipv6_bucket_size = 16     # Bucket prefix length for IPv6 (default: 16)
+ipv6_bucket_type = "string"  # IPv6 bucket value type: "string" or "int" (default: "string")
 ```
+
+| Option             | Description                                                                | Default  |
+| ------------------ | -------------------------------------------------------------------------- | -------- |
+| `delimiter`        | Field delimiter character                                                  | ","      |
+| `include_header`   | Include column headers in output                                           | true     |
+| `ipv4_bucket_size` | Prefix length for IPv4 buckets (1-32, when `network_bucket` column used)   | 16       |
+| `ipv6_bucket_size` | Prefix length for IPv6 buckets (1-60, when `network_bucket` column used)   | 16       |
+| `ipv6_bucket_type` | IPv6 bucket value type: "string" (hex) or "int" (first 60 bits as integer) | "string" |
 
 #### Parquet Options
 
@@ -80,8 +91,20 @@ When `format = "parquet"`, you can specify Parquet-specific options:
 
 ```toml
 [output.parquet]
-compression = "snappy"  # Compression: "none", "snappy", "gzip", "lz4", "zstd" (default: "snappy")
+compression = "snappy"    # Compression: "none", "snappy", "gzip", "lz4", "zstd" (default: "snappy")
+row_group_size = 500000   # Rows per row group (default: 500000)
+ipv4_bucket_size = 16     # Bucket prefix length for IPv4 (default: 16)
+ipv6_bucket_size = 16     # Bucket prefix length for IPv6 (default: 16)
+ipv6_bucket_type = "string"  # IPv6 bucket value type: "string" or "int" (default: "string")
 ```
+
+| Option             | Description                                                                | Default  |
+| ------------------ | -------------------------------------------------------------------------- | -------- |
+| `compression`      | Compression codec: "none", "snappy", "gzip", "lz4", "zstd"                 | "snappy" |
+| `row_group_size`   | Number of rows per row group                                               | 500000   |
+| `ipv4_bucket_size` | Prefix length for IPv4 buckets (1-32, when `network_bucket` column used)   | 16       |
+| `ipv6_bucket_size` | Prefix length for IPv6 buckets (1-60, when `network_bucket` column used)   | 16       |
+| `ipv6_bucket_type` | IPv6 bucket value type: "string" (hex) or "int" (first 60 bits as integer) | "string" |
 
 #### MMDB Options
 
@@ -121,6 +144,33 @@ ipv6_file = "merged_ipv6.parquet"
 
 When splitting output, both `ipv4_file` and `ipv6_file` must be configured.
 
+#### IPv6 Bucket Type Options
+
+IPv6 buckets can be stored as either hex strings (default) or int64 values:
+
+**String type (default):**
+
+- Format: 32-character hex string (e.g., "20010db8000000000000000000000000")
+- Storage: 32 bytes per value
+
+**Int type (`ipv6_bucket_type = "int"`):**
+
+- Format: First 60 bits of the bucket address as int64
+- Storage: 8 bytes per value (4x smaller than string)
+
+We use 60 bits (not 64) because 60-bit values always fit in a positive int64,
+which simplifies queries by avoiding two's complement handling.
+
+**When to use each type:**
+
+- Use **string** (default) for databases where hex string representations are
+  simpler to work with.
+- Use **int** for reduced storage cost at the price of more complicated queries.
+
+We do not provide a `bytes` type for the IPv6 bucket. Primarily this is because
+there so far has not been a need. For example, BigQuery cannot cluster on
+`bytes`, so it is not helpful there.
+
 ### Network Columns
 
 Network columns define how IP network information is output. These columns
@@ -134,11 +184,14 @@ type = "cidr"       # Output type
 
 **Available types:**
 
-- `cidr` - CIDR notation (e.g., "203.0.113.0/24")
-- `start_ip` - Starting IP address (e.g., "203.0.113.0")
-- `end_ip` - Ending IP address (e.g., "203.0.113.255")
-- `start_int` - Starting IP as integer
-- `end_int` - Ending IP as integer
+| Type             | Description                                                                                                                                                        |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `cidr`           | CIDR notation (e.g., "203.0.113.0/24")                                                                                                                             |
+| `start_ip`       | Starting IP address (e.g., "203.0.113.0")                                                                                                                          |
+| `end_ip`         | Ending IP address (e.g., "203.0.113.255")                                                                                                                          |
+| `start_int`      | Starting IP as integer                                                                                                                                             |
+| `end_int`        | Ending IP as integer                                                                                                                                               |
+| `network_bucket` | Bucket for efficient lookups. IPv4: integer. IPv6: hex string (default) or integer (with `ipv6_bucket_type = "int"`). Requires split files (CSV and Parquet only). |
 
 **Default behavior:** If no `[[network.columns]]` sections are defined:
 

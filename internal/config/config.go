@@ -16,6 +16,11 @@ const (
 	formatCSV     = "csv"
 	formatParquet = "parquet"
 	formatMMDB    = "mmdb"
+
+	// IPv6BucketTypeString stores IPv6 bucket values as hex strings.
+	IPv6BucketTypeString = "string"
+	// IPv6BucketTypeInt stores IPv6 bucket values as int64 (first 60 bits).
+	IPv6BucketTypeInt = "int"
 )
 
 // Config represents the complete configuration file structure.
@@ -41,14 +46,20 @@ type OutputConfig struct {
 
 // CSVConfig defines CSV output options.
 type CSVConfig struct {
-	Delimiter     string `toml:"delimiter"`      // Field delimiter (default: ",")
-	IncludeHeader *bool  `toml:"include_header"` // Include column headers (default: true)
+	Delimiter      string `toml:"delimiter"`        // Field delimiter (default: ",")
+	IncludeHeader  *bool  `toml:"include_header"`   // Include column headers (default: true)
+	IPv4BucketSize int    `toml:"ipv4_bucket_size"` // Bucket prefix length for IPv4 (default: 16)
+	IPv6BucketSize int    `toml:"ipv6_bucket_size"` // Bucket prefix length for IPv6 (default: 16)
+	IPv6BucketType string `toml:"ipv6_bucket_type"` // "string" or "int" (default: "string")
 }
 
 // ParquetConfig defines Parquet output options.
 type ParquetConfig struct {
-	Compression  string `toml:"compression"`    // "none", "snappy", "gzip", "lz4", "zstd" (default: "snappy")
-	RowGroupSize int    `toml:"row_group_size"` // Rows per row group (default: 500000)
+	Compression    string `toml:"compression"`      // "none", "snappy", "gzip", "lz4", "zstd" (default: "snappy")
+	RowGroupSize   int    `toml:"row_group_size"`   // Rows per row group (default: 500000)
+	IPv4BucketSize int    `toml:"ipv4_bucket_size"` // Bucket prefix length for IPv4 (default: 16)
+	IPv6BucketSize int    `toml:"ipv6_bucket_size"` // Bucket prefix length for IPv6 (default: 16)
+	IPv6BucketType string `toml:"ipv6_bucket_type"` // "string" or "int" (default: "string")
 }
 
 // MMDBConfig defines MMDB output options.
@@ -166,6 +177,15 @@ func applyDefaults(config *Config) {
 	if config.Output.CSV.IncludeHeader == nil {
 		config.Output.CSV.IncludeHeader = boolPtr(true)
 	}
+	if config.Output.CSV.IPv4BucketSize == 0 {
+		config.Output.CSV.IPv4BucketSize = 16
+	}
+	if config.Output.CSV.IPv6BucketSize == 0 {
+		config.Output.CSV.IPv6BucketSize = 16
+	}
+	if config.Output.CSV.IPv6BucketType == "" {
+		config.Output.CSV.IPv6BucketType = IPv6BucketTypeString
+	}
 
 	// Parquet defaults
 	if config.Output.Parquet.Compression == "" {
@@ -173,6 +193,15 @@ func applyDefaults(config *Config) {
 	}
 	if config.Output.Parquet.RowGroupSize == 0 {
 		config.Output.Parquet.RowGroupSize = 500000
+	}
+	if config.Output.Parquet.IPv4BucketSize == 0 {
+		config.Output.Parquet.IPv4BucketSize = 16
+	}
+	if config.Output.Parquet.IPv6BucketSize == 0 {
+		config.Output.Parquet.IPv6BucketSize = 16
+	}
+	if config.Output.Parquet.IPv6BucketType == "" {
+		config.Output.Parquet.IPv6BucketType = IPv6BucketTypeString
 	}
 
 	// MMDB defaults
@@ -315,8 +344,10 @@ func validate(config *Config) error {
 	// Validate network columns
 	validNetworkTypes := map[string]bool{
 		"cidr": true, "start_ip": true, "end_ip": true, "start_int": true, "end_int": true,
+		"network_bucket": true,
 	}
 	networkColNames := map[mmdbtype.String]bool{}
+	hasBucketColumn := false
 	for _, col := range config.Network.Columns {
 		if col.Name == "" {
 			return errors.New("network column name is required")
@@ -326,15 +357,38 @@ func validate(config *Config) error {
 		}
 		if !validNetworkTypes[col.Type] {
 			return fmt.Errorf(
-				"invalid network column type '%s' for column '%s', must be one of: cidr, start_ip, end_ip, start_int, end_int",
+				"invalid network column type '%s' for column '%s', must be one of: cidr, start_ip, end_ip, start_int, end_int, network_bucket",
 				col.Type,
 				col.Name,
 			)
+		}
+		if col.Type == "network_bucket" {
+			hasBucketColumn = true
 		}
 		if networkColNames[col.Name] {
 			return fmt.Errorf("duplicate network column name '%s'", col.Name)
 		}
 		networkColNames[col.Name] = true
+	}
+
+	if hasBucketColumn {
+		if config.Output.Format == formatMMDB {
+			return errors.New(
+				"network_bucket column type is only supported for CSV and Parquet output",
+			)
+		}
+
+		// network_bucket column requires split files (different types for IPv4 vs
+		// IPv6)
+		if config.Output.IPv4File == "" || config.Output.IPv6File == "" {
+			return errors.New(
+				"network_bucket column requires split files (ipv4_file and ipv6_file)",
+			)
+		}
+
+		if err := validateBucketConfig(config); err != nil {
+			return err
+		}
 	}
 
 	// Validate data columns
@@ -382,6 +436,47 @@ func validate(config *Config) error {
 		dataColNames[col.Name] = true
 
 		// Empty output_path is allowed - it means merge into root for MMDB output
+	}
+
+	return nil
+}
+
+// validateBucketConfig validates bucket configuration for CSV or Parquet output.
+func validateBucketConfig(config *Config) error {
+	var ipv4BucketSize, ipv6BucketSize int
+	var ipv6BucketType string
+
+	if config.Output.Format == formatCSV {
+		ipv4BucketSize = config.Output.CSV.IPv4BucketSize
+		ipv6BucketSize = config.Output.CSV.IPv6BucketSize
+		ipv6BucketType = config.Output.CSV.IPv6BucketType
+	} else {
+		ipv4BucketSize = config.Output.Parquet.IPv4BucketSize
+		ipv6BucketSize = config.Output.Parquet.IPv6BucketSize
+		ipv6BucketType = config.Output.Parquet.IPv6BucketType
+	}
+
+	if ipv4BucketSize < 1 || ipv4BucketSize > 32 {
+		return fmt.Errorf(
+			"ipv4_bucket_size must be between 1 and 32, got %d",
+			ipv4BucketSize,
+		)
+	}
+
+	// IPv6 bucket size capped at 60 to support int type (60-bit values fit in
+	// positive int64, simplifying BigQuery queries)
+	if ipv6BucketSize < 1 || ipv6BucketSize > 60 {
+		return fmt.Errorf(
+			"ipv6_bucket_size must be between 1 and 60, got %d",
+			ipv6BucketSize,
+		)
+	}
+
+	if ipv6BucketType != IPv6BucketTypeString && ipv6BucketType != IPv6BucketTypeInt {
+		return fmt.Errorf(
+			"ipv6_bucket_type must be 'string' or 'int', got '%s'",
+			ipv6BucketType,
+		)
 	}
 
 	return nil

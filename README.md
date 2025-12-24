@@ -406,6 +406,10 @@ type = "start_int"     # e.g., 3405803776 (IPv4 only)
 [[network.columns]]
 name = "end_int"
 type = "end_int"       # e.g., 3405804031 (IPv4 only)
+
+[[network.columns]]
+name = "network_bucket"
+type = "network_bucket"  # Bucket for efficient lookups. Requires split files.
 ```
 
 **Default network columns:** If you don't define any `[[network.columns]]`,
@@ -418,6 +422,52 @@ mmdbconvert automatically provides sensible defaults based on output format:
 split your output into separate IPv4/IPv6 files via `output.ipv4_file` and
 `output.ipv6_file`. For single-file outputs that include IPv6 data, use string
 columns (`start_ip`, `end_ip`, `cidr`).
+
+### Network Bucketing for Analytics (BigQuery, etc.)
+
+When loading network data into analytics platforms like BigQuery, range queries
+can be slow due to full table scans. The `network_bucket` column provides a join
+key that enables efficient queries by first filtering to a specific bucket.
+
+**Configuration:**
+
+```toml
+[output]
+format = "parquet"
+ipv4_file = "geoip-v4.parquet"
+ipv6_file = "geoip-v6.parquet"
+
+[output.parquet]
+ipv4_bucket_size = 16     # Optional, defaults to 16
+ipv6_bucket_size = 16     # Optional, defaults to 16
+ipv6_bucket_type = "int"  # Optional: "string" (default) or "int"
+
+[[network.columns]]
+name = "start_int"
+type = "start_int"
+
+[[network.columns]]
+name = "end_int"
+type = "end_int"
+
+[[network.columns]]
+name = "network_bucket"
+type = "network_bucket"
+```
+
+For IPv4, the bucket is a 32-bit integer. For IPv6, the bucket is either a hex
+string (default) or a 60-bit integer when `ipv6_bucket_type = "int"` is
+configured.
+
+Using `network_bucket` requires split output files.
+
+See [docs/bigquery.md](docs/bigquery.md) for BigQuery query examples.
+
+**Note:** When a network is larger than the bucket size (e.g., a /15 with /16
+buckets), the row is duplicated for each bucket it spans. This ensures queries
+find the correct network regardless of which bucket the IP falls into.
+
+**Note:** `network_bucket` is supported for CSV and Parquet output.
 
 ### Data Type Hints
 
@@ -527,6 +577,7 @@ This ensures accurate IP lookups with no ambiguity.
 
 - [Configuration Reference](docs/config.md) - Complete config file documentation
 - [Parquet Query Guide](docs/parquet-queries.md) - Optimizing IP lookup queries
+- [BigQuery Guide](docs/bigquery.md) - Network bucketing for BigQuery
 
 ## Requirements
 
