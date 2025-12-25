@@ -763,7 +763,7 @@ func TestCSVWriter_NetworkBucket_IPv6_Int(t *testing.T) {
 			network:          "2001:0d00::/24",
 			bucketSize:       16,
 			expectedRowCount: 1,
-			expectedBuckets:  []string{csvIPv6BucketToInt("2001::")},
+			expectedBuckets:  []string{"8193"}, // 0x2001
 			expectedStartInt: csvIPv6ToInt("2001:0d00::"),
 			expectedEndInt:   csvIPv6ToInt("2001:0dff:ffff:ffff:ffff:ffff:ffff:ffff"),
 		},
@@ -772,10 +772,7 @@ func TestCSVWriter_NetworkBucket_IPv6_Int(t *testing.T) {
 			network:          "abcc::/15",
 			bucketSize:       16,
 			expectedRowCount: 2,
-			expectedBuckets: []string{
-				csvIPv6BucketToInt("abcc::"),
-				csvIPv6BucketToInt("abcd::"),
-			},
+			expectedBuckets:  []string{"43980", "43981"}, // 0xabcc, 0xabcd
 			expectedStartInt: csvIPv6ToInt("abcc::"),
 			expectedEndInt:   csvIPv6ToInt("abcd:ffff:ffff:ffff:ffff:ffff:ffff:ffff"),
 		},
@@ -785,22 +782,10 @@ func TestCSVWriter_NetworkBucket_IPv6_Int(t *testing.T) {
 			bucketSize:       16,
 			expectedRowCount: 16,
 			expectedBuckets: []string{
-				csvIPv6BucketToInt("2000::"),
-				csvIPv6BucketToInt("2001::"),
-				csvIPv6BucketToInt("2002::"),
-				csvIPv6BucketToInt("2003::"),
-				csvIPv6BucketToInt("2004::"),
-				csvIPv6BucketToInt("2005::"),
-				csvIPv6BucketToInt("2006::"),
-				csvIPv6BucketToInt("2007::"),
-				csvIPv6BucketToInt("2008::"),
-				csvIPv6BucketToInt("2009::"),
-				csvIPv6BucketToInt("200a::"),
-				csvIPv6BucketToInt("200b::"),
-				csvIPv6BucketToInt("200c::"),
-				csvIPv6BucketToInt("200d::"),
-				csvIPv6BucketToInt("200e::"),
-				csvIPv6BucketToInt("200f::"),
+				"8192", "8193", "8194", "8195", // 0x2000-0x2003
+				"8196", "8197", "8198", "8199", // 0x2004-0x2007
+				"8200", "8201", "8202", "8203", // 0x2008-0x200b
+				"8204", "8205", "8206", "8207", // 0x200c-0x200f
 			},
 			expectedStartInt: csvIPv6ToInt("2000::"),
 			expectedEndInt:   csvIPv6ToInt("200f:ffff:ffff:ffff:ffff:ffff:ffff:ffff"),
@@ -810,10 +795,7 @@ func TestCSVWriter_NetworkBucket_IPv6_Int(t *testing.T) {
 			network:          "2001:0000::/23",
 			bucketSize:       24,
 			expectedRowCount: 2,
-			expectedBuckets: []string{
-				csvIPv6BucketToInt("2001::"),
-				csvIPv6BucketToInt("2001:100::"),
-			},
+			expectedBuckets:  []string{"2097408", "2097409"}, // 0x200100, 0x200101
 			expectedStartInt: csvIPv6ToInt("2001::"),
 			expectedEndInt:   csvIPv6ToInt("2001:01ff:ffff:ffff:ffff:ffff:ffff:ffff"),
 		},
@@ -822,7 +804,7 @@ func TestCSVWriter_NetworkBucket_IPv6_Int(t *testing.T) {
 			network:          "2001:db8::1/128",
 			bucketSize:       16,
 			expectedRowCount: 1,
-			expectedBuckets:  []string{csvIPv6BucketToInt("2001::")},
+			expectedBuckets:  []string{"8193"}, // 0x2001
 			expectedStartInt: csvIPv6ToInt("2001:db8::1"),
 			expectedEndInt:   csvIPv6ToInt("2001:db8::1"),
 		},
@@ -908,14 +890,4 @@ func csvIPv6ToInt(s string) string {
 	var i big.Int
 	i.SetBytes(b[:])
 	return i.String()
-}
-
-// csvIPv6BucketToInt converts an IPv6 bucket address string to its 60-bit decimal string.
-func csvIPv6BucketToInt(s string) string {
-	ip := netip.MustParseAddr(s)
-	val, err := network.IPv6BucketToInt64(ip)
-	if err != nil {
-		panic(err)
-	}
-	return strconv.FormatInt(val, 10)
 }

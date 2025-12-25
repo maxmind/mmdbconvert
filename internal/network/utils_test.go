@@ -41,7 +41,7 @@ func TestIPv4ToUint32(t *testing.T) {
 	}
 }
 
-// TestIPv6BucketToInt64 tests conversion of IPv6 addresses to 60-bit integers.
+// TestIPv6BucketToInt64 tests conversion of IPv6 addresses to bucket integers.
 //
 // Expected values can be verified with this BigQuery query (using bucket size 16):
 //
@@ -49,29 +49,29 @@ func TestIPv4ToUint32(t *testing.T) {
 //	  ip,
 //	  expected,
 //	  CAST(CONCAT('0x', SUBSTR(
-//	    TO_HEX(NET.IP_TRUNC(NET.IP_FROM_STRING(ip), 16)), 1, 15
+//	    TO_HEX(NET.IP_TRUNC(NET.IP_FROM_STRING(ip), 16)), 1, 4
 //	  )) AS INT64) as bucket_int,
 //	  CAST(CONCAT('0x', SUBSTR(
-//	    TO_HEX(NET.IP_TRUNC(NET.IP_FROM_STRING(ip), 16)), 1, 15
+//	    TO_HEX(NET.IP_TRUNC(NET.IP_FROM_STRING(ip), 16)), 1, 4
 //	  )) AS INT64) = expected as matches
 //	FROM UNNEST([
 //	  STRUCT('::' AS ip, 0 AS expected),
-//	  ('2001::', 144132780261900288),
-//	  ('2001:db8::', 144132780261900288),
-//	  ('abcc::', 773704342233415680),
-//	  ('abcd::', 773721934419460096),
-//	  ('ffff:ffff:ffff:ffff::', 1152903912420802560),
-//	  ('8000::', 576460752303423488),
-//	  ('7fff:ffff:ffff:ffff::', 576443160117379072),
+//	  ('2001::', 8193),
+//	  ('2001:db8::', 8193),
+//	  ('abcc::', 43980),
+//	  ('abcd::', 43981),
+//	  ('ffff:ffff:ffff:ffff::', 65535),
+//	  ('8000::', 32768),
+//	  ('7fff:ffff:ffff:ffff::', 32767),
 //	  ('0:0:0:f::', 0),
 //	  ('0:0:0:10::', 0),
 //	  ('0:0:0:1f::', 0),
 //	  ('0:0:0:20::', 0),
-//	  ('2001:db8::1', 144132780261900288),
-//	  ('2001:db8:0:0:ffff:ffff:ffff:ffff', 144132780261900288),
-//	  ('ffff:ffff:ffff:fff0::', 1152903912420802560),
-//	  ('ffff:ffff:ffff:ffef::', 1152903912420802560),
-//	  ('1::', 17592186044416),
+//	  ('2001:db8::1', 8193),
+//	  ('2001:db8:0:0:ffff:ffff:ffff:ffff', 8193),
+//	  ('ffff:ffff:ffff:fff0::', 65535),
+//	  ('ffff:ffff:ffff:ffef::', 65535),
+//	  ('1::', 1),
 //	  ('::ffff:192.168.1.1', 0)
 //	]);
 func TestIPv6BucketToInt64(t *testing.T) {
@@ -91,43 +91,43 @@ func TestIPv6BucketToInt64(t *testing.T) {
 			name:       "2001:: (common prefix)",
 			ip:         "2001::",
 			bucketSize: 16,
-			expected:   144132780261900288,
+			expected:   0x2001, // 8193
 		},
 		{
 			name:       "2001:db8:: (documentation prefix, truncated to /16)",
 			ip:         "2001:db8::",
 			bucketSize: 16,
-			expected:   144132780261900288,
+			expected:   0x2001, // 8193
 		},
 		{
 			name:       "abcc:: (test bucket boundary)",
 			ip:         "abcc::",
 			bucketSize: 16,
-			expected:   773704342233415680,
+			expected:   0xabcc, // 43980
 		},
 		{
 			name:       "abcd:: (adjacent to abcc::)",
 			ip:         "abcd::",
 			bucketSize: 16,
-			expected:   773721934419460096,
+			expected:   0xabcd, // 43981
 		},
 		{
 			name:       "ffff:ffff:ffff:ffff:: (truncated to ffff::)",
 			ip:         "ffff:ffff:ffff:ffff::",
 			bucketSize: 16,
-			expected:   1152903912420802560,
+			expected:   0xffff, // 65535
 		},
 		{
-			name:       "8000:: (high bit set, still positive in 60-bit)",
+			name:       "8000:: (high bit set)",
 			ip:         "8000::",
 			bucketSize: 16,
-			expected:   576460752303423488,
+			expected:   0x8000, // 32768
 		},
 		{
 			name:       "7fff:ffff:ffff:ffff:: (truncated to 7fff::)",
 			ip:         "7fff:ffff:ffff:ffff::",
 			bucketSize: 16,
-			expected:   576443160117379072,
+			expected:   0x7fff, // 32767
 		},
 		// Beyond /16 boundary tests - all truncate to ::
 		{
@@ -159,33 +159,33 @@ func TestIPv6BucketToInt64(t *testing.T) {
 			name:       "2001:db8::1 (truncated to 2001::)",
 			ip:         "2001:db8::1",
 			bucketSize: 16,
-			expected:   144132780261900288,
+			expected:   0x2001, // 8193
 		},
 		{
 			name:       "2001:db8:0:0:ffff:ffff:ffff:ffff (truncated to 2001::)",
 			ip:         "2001:db8:0:0:ffff:ffff:ffff:ffff",
 			bucketSize: 16,
-			expected:   144132780261900288,
+			expected:   0x2001, // 8193
 		},
 		// Same bucket when truncated to /16
 		{
 			name:       "ffff:ffff:ffff:fff0:: (truncated to ffff::)",
 			ip:         "ffff:ffff:ffff:fff0::",
 			bucketSize: 16,
-			expected:   1152903912420802560,
+			expected:   0xffff, // 65535
 		},
 		{
 			name:       "ffff:ffff:ffff:ffef:: (truncated to ffff::)",
 			ip:         "ffff:ffff:ffff:ffef::",
 			bucketSize: 16,
-			expected:   1152903912420802560,
+			expected:   0xffff, // 65535
 		},
 		// Single-bit position test
 		{
-			name:       "1:: (high bit position)",
+			name:       "1:: (low value)",
 			ip:         "1::",
 			bucketSize: 16,
-			expected:   17592186044416,
+			expected:   1,
 		},
 		// IPv4-mapped address - truncated to ::
 		{
@@ -194,6 +194,31 @@ func TestIPv6BucketToInt64(t *testing.T) {
 			bucketSize: 16,
 			expected:   0,
 		},
+		// Different bucket sizes
+		{
+			name:       "2001:db80:: with /32 bucket",
+			ip:         "2001:db80::",
+			bucketSize: 32,
+			expected:   0x2001db80, // 536928128
+		},
+		{
+			name:       "2001:db8a:bcde:: with /48 bucket",
+			ip:         "2001:db8a:bcde::",
+			bucketSize: 48,
+			expected:   0x2001db8abcde, // 35343878970590
+		},
+		{
+			name:       "ffff:: with /8 bucket",
+			ip:         "ffff::",
+			bucketSize: 8,
+			expected:   0xff, // 255
+		},
+		{
+			name:       "dead:beef:: with /24 bucket",
+			ip:         "dead:beef::",
+			bucketSize: 24,
+			expected:   0xdeadbe, // 14593470
+		},
 	}
 
 	for _, tt := range tests {
@@ -201,7 +226,7 @@ func TestIPv6BucketToInt64(t *testing.T) {
 			ip := netip.MustParseAddr(tt.ip)
 			prefix := netip.PrefixFrom(ip, tt.bucketSize)
 			maskedIP := prefix.Masked().Addr()
-			result, err := IPv6BucketToInt64(maskedIP)
+			result, err := IPv6BucketToInt64(maskedIP, tt.bucketSize)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, result)
 		})
@@ -210,7 +235,7 @@ func TestIPv6BucketToInt64(t *testing.T) {
 
 func TestIPv6BucketToInt64_IPv4Error(t *testing.T) {
 	ip := netip.MustParseAddr("192.168.1.1")
-	_, err := IPv6BucketToInt64(ip)
+	_, err := IPv6BucketToInt64(ip, 16)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "non-IPv6")
 }

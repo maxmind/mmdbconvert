@@ -321,7 +321,7 @@ func (w *CSVWriter) generateNetworkColumnValue(
 		if w.config.Output.CSV.IPv6BucketType != config.IPv6BucketTypeInt {
 			return fmt.Sprintf("%x", bucketAddr.As16()), nil
 		}
-		val, err := network.IPv6BucketToInt64(bucketAddr)
+		val, err := network.IPv6BucketToInt64(bucketAddr, w.getBucketSize(true))
 		if err != nil {
 			return "", fmt.Errorf("converting IPv6 bucket to int64: %w", err)
 		}

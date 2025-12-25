@@ -850,16 +850,6 @@ func ipv6ToBytes(s string) []byte {
 	return b[:]
 }
 
-// ipv6BucketToInt64 converts an IPv6 bucket address string to int64 (60-bit value).
-func ipv6BucketToInt64(s string) int64 {
-	ip := netip.MustParseAddr(s)
-	val, err := network.IPv6BucketToInt64(ip)
-	if err != nil {
-		panic(err)
-	}
-	return val
-}
-
 func TestParquetWriter_NetworkBucket_IPv6_Int(t *testing.T) {
 	tests := []struct {
 		name             string
@@ -875,7 +865,7 @@ func TestParquetWriter_NetworkBucket_IPv6_Int(t *testing.T) {
 			network:          "2001:0d00::/24",
 			bucketSize:       16,
 			expectedRowCount: 1,
-			expectedBuckets:  []int64{ipv6BucketToInt64("2001::")},
+			expectedBuckets:  []int64{0x2001}, // 8193
 			expectedStartInt: ipv6ToBytes("2001:0d00::"),
 			expectedEndInt:   ipv6ToBytes("2001:0dff:ffff:ffff:ffff:ffff:ffff:ffff"),
 		},
@@ -884,10 +874,7 @@ func TestParquetWriter_NetworkBucket_IPv6_Int(t *testing.T) {
 			network:          "abcc::/15",
 			bucketSize:       16,
 			expectedRowCount: 2,
-			expectedBuckets: []int64{
-				ipv6BucketToInt64("abcc::"),
-				ipv6BucketToInt64("abcd::"),
-			},
+			expectedBuckets:  []int64{0xabcc, 0xabcd}, // 43980, 43981
 			expectedStartInt: ipv6ToBytes("abcc::"),
 			expectedEndInt:   ipv6ToBytes("abcd:ffff:ffff:ffff:ffff:ffff:ffff:ffff"),
 		},
@@ -897,22 +884,10 @@ func TestParquetWriter_NetworkBucket_IPv6_Int(t *testing.T) {
 			bucketSize:       16,
 			expectedRowCount: 16,
 			expectedBuckets: []int64{
-				ipv6BucketToInt64("2000::"),
-				ipv6BucketToInt64("2001::"),
-				ipv6BucketToInt64("2002::"),
-				ipv6BucketToInt64("2003::"),
-				ipv6BucketToInt64("2004::"),
-				ipv6BucketToInt64("2005::"),
-				ipv6BucketToInt64("2006::"),
-				ipv6BucketToInt64("2007::"),
-				ipv6BucketToInt64("2008::"),
-				ipv6BucketToInt64("2009::"),
-				ipv6BucketToInt64("200a::"),
-				ipv6BucketToInt64("200b::"),
-				ipv6BucketToInt64("200c::"),
-				ipv6BucketToInt64("200d::"),
-				ipv6BucketToInt64("200e::"),
-				ipv6BucketToInt64("200f::"),
+				0x2000, 0x2001, 0x2002, 0x2003,
+				0x2004, 0x2005, 0x2006, 0x2007,
+				0x2008, 0x2009, 0x200a, 0x200b,
+				0x200c, 0x200d, 0x200e, 0x200f,
 			},
 			expectedStartInt: ipv6ToBytes("2000::"),
 			expectedEndInt:   ipv6ToBytes("200f:ffff:ffff:ffff:ffff:ffff:ffff:ffff"),
@@ -922,10 +897,7 @@ func TestParquetWriter_NetworkBucket_IPv6_Int(t *testing.T) {
 			network:          "2001:0000::/23",
 			bucketSize:       24,
 			expectedRowCount: 2,
-			expectedBuckets: []int64{
-				ipv6BucketToInt64("2001::"),
-				ipv6BucketToInt64("2001:100::"),
-			},
+			expectedBuckets:  []int64{0x200100, 0x200101}, // 2097408, 2097409
 			expectedStartInt: ipv6ToBytes("2001::"),
 			expectedEndInt:   ipv6ToBytes("2001:01ff:ffff:ffff:ffff:ffff:ffff:ffff"),
 		},
@@ -934,7 +906,7 @@ func TestParquetWriter_NetworkBucket_IPv6_Int(t *testing.T) {
 			network:          "2001:db8::1/128",
 			bucketSize:       16,
 			expectedRowCount: 1,
-			expectedBuckets:  []int64{ipv6BucketToInt64("2001::")},
+			expectedBuckets:  []int64{0x2001}, // 8193
 			expectedStartInt: ipv6ToBytes("2001:db8::1"),
 			expectedEndInt:   ipv6ToBytes("2001:db8::1"),
 		},
