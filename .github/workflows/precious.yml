@@ -1,0 +1,28 @@
+name: precious
+
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: '5 5 * * SUN'
+
+permissions: {}
+
+jobs:
+  precious:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Install precious
+        run: |
+          curl -sL https://github.com/houseabsolute/precious/releases/download/v0.10.1/precious-Linux-musl-x86_64.tar.gz | tar xz -C /usr/local/bin
+
+      - name: Run precious
+        run: precious lint --command prettier-markdown --all
