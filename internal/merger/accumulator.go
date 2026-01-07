@@ -104,7 +104,12 @@ func (a *Accumulator) Flush() error {
 	}
 
 	if rangeWriter, ok := a.writer.(RangeRowWriter); ok {
-		if err := rangeWriter.WriteRange(a.current.StartIP, a.current.EndIP, a.current.Data); err != nil {
+		err := rangeWriter.WriteRange(
+			a.current.StartIP,
+			a.current.EndIP,
+			a.current.Data,
+		)
+		if err != nil {
 			return fmt.Errorf(
 				"writing range %s-%s: %w",
 				a.current.StartIP,
