@@ -476,3 +476,94 @@ func TestSplitPrefix_InvalidPrefix(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid prefix")
 }
+
+func TestNormalizeIPv6Prefix(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		minBits  int
+		expected string
+	}{
+		{
+			name:     "IPv6 /128 to /64",
+			input:    "2001:db8::1/128",
+			minBits:  64,
+			expected: "2001:db8::/64",
+		},
+		{
+			name:     "IPv6 /96 to /64",
+			input:    "2001:db8::abcd:1234/96",
+			minBits:  64,
+			expected: "2001:db8::/64",
+		},
+		{
+			name:     "IPv6 /72 to /64",
+			input:    "2001:db8:0:1:2::/72",
+			minBits:  64,
+			expected: "2001:db8:0:1::/64",
+		},
+		{
+			name:     "IPv6 /64 unchanged",
+			input:    "2001:db8::/64",
+			minBits:  64,
+			expected: "2001:db8::/64",
+		},
+		{
+			name:     "IPv6 /48 unchanged (broader than minimum)",
+			input:    "2001:db8::/48",
+			minBits:  64,
+			expected: "2001:db8::/48",
+		},
+		{
+			name:     "IPv6 /32 unchanged (much broader)",
+			input:    "2001::/32",
+			minBits:  64,
+			expected: "2001::/32",
+		},
+		{
+			name:     "IPv4 /32 unchanged",
+			input:    "192.168.1.1/32",
+			minBits:  64,
+			expected: "192.168.1.1/32",
+		},
+		{
+			name:     "IPv4 /24 unchanged",
+			input:    "192.168.1.0/24",
+			minBits:  64,
+			expected: "192.168.1.0/24",
+		},
+		{
+			name:     "IPv6 /128 to /56",
+			input:    "2001:db8::1/128",
+			minBits:  56,
+			expected: "2001:db8::/56",
+		},
+		{
+			name:     "IPv6 /80 to /56",
+			input:    "2001:db8::1:2:3/80",
+			minBits:  56,
+			expected: "2001:db8::/56",
+		},
+		{
+			name:     "IPv6 zero address /128 to /64",
+			input:    "::/128",
+			minBits:  64,
+			expected: "::/64",
+		},
+		{
+			name:     "IPv6 with non-zero bits beyond minBits gets masked",
+			input:    "2001:db8:cafe:babe:dead:beef::/120",
+			minBits:  64,
+			expected: "2001:db8:cafe:babe::/64",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			input := netip.MustParsePrefix(tt.input)
+			expected := netip.MustParsePrefix(tt.expected)
+			result := NormalizeIPv6Prefix(input, tt.minBits)
+			assert.Equal(t, expected, result, "prefix should be normalized correctly")
+		})
+	}
+}

@@ -54,6 +54,7 @@ file = "output.csv"  # Output file path (use this for a combined file)
 # ipv4_file = "output_ipv4.csv"  # Optional IPv4-only file (set both ipv4_file and ipv6_file, omit file)
 # ipv6_file = "output_ipv6.csv"  # Optional IPv6-only file (set both ipv4_file and ipv6_file, omit file)
 include_empty_rows = false  # Include rows with no MMDB data (default: false)
+ipv6_min_prefix = 64  # Optional: Minimum IPv6 prefix length - truncates more specific prefixes (default: nil = no normalization)
 ```
 
 **Data Filtering:**
@@ -63,6 +64,18 @@ include_empty_rows = false  # Include rows with no MMDB data (default: false)
   are skipped. When `true`, all network ranges are included even if they have no
   associated data. Network columns (CIDR, start_ip, etc.) are always present and
   don't affect this filtering.
+
+**IPv6 Prefix Normalization:**
+
+- `ipv6_min_prefix` - Optional minimum prefix length for IPv6 networks. When
+  set, any IPv6 prefix more specific (larger prefix length) than this value will
+  be truncated to this prefix length. For example, with `ipv6_min_prefix = 64`:
+  - `2001:db8::1/128` becomes `2001:db8::/64`
+  - `2001:db8::/48` remains unchanged (already /48)
+  - IPv4 prefixes are never affected
+
+  When omitted (default), no normalization is applied and prefixes are output as-is.
+  Valid range: 0-128.
 
 #### CSV Options
 

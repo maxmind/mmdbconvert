@@ -184,12 +184,27 @@ func NewMerger(readers *mmdb.Readers, cfg *config.Config, writer RowWriter) (*Me
 	return m, nil
 }
 
+// normalizePrefix applies IPv6 prefix normalization if configured.
+// IPv4 prefixes and IPv6 prefixes already meeting the minimum are unchanged.
+func (m *Merger) normalizePrefix(prefix netip.Prefix) netip.Prefix {
+	if m.config.Output.IPv6MinPrefix != nil {
+		return network.NormalizeIPv6Prefix(prefix, *m.config.Output.IPv6MinPrefix)
+	}
+	return prefix
+}
+
 // Merge performs the streaming merge of all databases.
 // It uses nested NetworksWithin iteration to find the smallest overlapping
 // networks across all databases, then extracts data and streams to accumulator.
 func (m *Merger) Merge() error {
 	// readersList and dbNamesList are already built in NewMerger()
 	firstReader := m.readersList[0]
+
+	// Track last normalized prefix to skip redundant iterations.
+	// When IPv6 normalization is enabled (e.g., ipv6_min_prefix=64), the first
+	// database might contain millions of /128 addresses that all normalize to
+	// the same /64. We only need to process each unique normalized prefix once.
+	var lastNormalized netip.Prefix
 
 	// Iterate all networks in the first database
 	for result := range firstReader.Networks(maxminddb.IncludeNetworksWithoutData()) {
@@ -198,6 +213,14 @@ func (m *Merger) Merge() error {
 		}
 
 		prefix := result.Prefix()
+		// Apply IPv6 prefix normalization if configured
+		prefix = m.normalizePrefix(prefix)
+
+		// Skip if this normalizes to the same prefix we just processed.
+		if lastNormalized.IsValid() && prefix == lastNormalized {
+			continue
+		}
+		lastNormalized = prefix
 
 		// If there's only one database, extract and process directly
 		if len(m.readersList) == 1 {
@@ -252,6 +275,8 @@ func (m *Merger) processNetwork(
 		}
 
 		nextNetwork := result.Prefix()
+		// Apply IPv6 prefix normalization if configured
+		nextNetwork = m.normalizePrefix(nextNetwork)
 
 		// Determine smallest (most specific) network
 		smallest := network.SmallestNetwork(effectivePrefix, nextNetwork)

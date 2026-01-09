@@ -66,6 +66,27 @@ func SmallestNetwork(a, b netip.Prefix) netip.Prefix {
 	return b
 }
 
+// NormalizeIPv6Prefix truncates IPv6 prefixes to a minimum prefix length.
+// IPv4 prefixes and IPv6 prefixes with bits <= minBits are returned unchanged.
+// IPv6 prefixes with bits > minBits are truncated to minBits.
+//
+// For example, with minBits=64:
+//   - 2001:db8::1/128 -> 2001:db8::/64
+//   - 2001:db8::/48 -> 2001:db8::/48 (unchanged)
+//   - 192.168.1.0/32 -> 192.168.1.0/32 (IPv4 unchanged)
+func NormalizeIPv6Prefix(prefix netip.Prefix, minBits int) netip.Prefix {
+	if !prefix.Addr().Is6() {
+		return prefix // IPv4 unchanged
+	}
+
+	if prefix.Bits() <= minBits {
+		return prefix // Already broad enough
+	}
+
+	// Truncate to minBits and ensure it's properly masked
+	return netip.PrefixFrom(prefix.Addr(), minBits).Masked()
+}
+
 // SplitPrefix splits a prefix into multiple prefixes of the desired size.
 // If the prefix is already the requested size or smaller, it is returned as-is.
 func SplitPrefix(prefix netip.Prefix, prefixSize int) ([]netip.Prefix, error) {
