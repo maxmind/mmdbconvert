@@ -10,6 +10,12 @@ and this project adheres to
 
 ### Added
 
+- IPv6 prefix normalization via `ipv6_min_prefix` configuration option. When
+  set, IPv6 networks more specific than the configured prefix length are
+  truncated to that length (e.g., with `ipv6_min_prefix = 64`, a /128 address
+  becomes /64). This reduces output size and improves query performance by
+  consolidating specific addresses into broader networks. IPv4 prefixes are
+  never affected. When omitted, prefixes are output as-is (backward compatible).
 - Parquet sorting column metadata for query optimization. When start_int columns
   are configured, mmdbconvert now writes sorting metadata to the Parquet file
   declaring that rows are sorted by start_int in ascending order. This enables

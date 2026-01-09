@@ -1,0 +1,46 @@
+# IPv6 Prefix Normalization Example - MMDB Output
+# This configuration demonstrates how to normalize IPv6 prefixes to /64 subnets
+# when creating MMDB output files.
+#
+# Use case: When you don't need per-address granularity and want to consolidate
+# specific IPv6 addresses (/128) into standard /64 subnets in the output MMDB.
+#
+# Example transformations with ipv6_min_prefix = 64:
+#   2001:db8::1/128        -> 2001:db8::/64
+#   2001:db8::abcd:1234/96 -> 2001:db8::/64
+#   2001:db8::/48          -> 2001:db8::/48 (unchanged, already broader)
+#   192.168.1.0/32         -> 192.168.1.0/32 (IPv4 never affected)
+
+[output]
+format = "mmdb"
+file = "geo-normalized.mmdb"
+ipv6_min_prefix = 64  # Truncate IPv6 prefixes to /64 minimum
+
+[output.mmdb]
+database_type = "GeoIP2-City"
+description = { en = "City Database with IPv6 /64 Normalization" }
+record_size = 28
+
+# Database
+[[databases]]
+name = "geo"
+path = "/var/lib/GeoIP/GeoIP2-City.mmdb"
+
+# Copy selected fields - type hints not needed for MMDB output
+[[columns]]
+name = "country"
+database = "geo"
+path = ["country"]
+output_path = ["country"]
+
+[[columns]]
+name = "city"
+database = "geo"
+path = ["city"]
+output_path = ["city"]
+
+[[columns]]
+name = "location"
+database = "geo"
+path = ["location"]
+output_path = ["location"]

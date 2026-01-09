@@ -42,6 +42,7 @@ type OutputConfig struct {
 	IPv4File         string        `toml:"ipv4_file"`
 	IPv6File         string        `toml:"ipv6_file"`
 	IncludeEmptyRows *bool         `toml:"include_empty_rows"` // Include rows with no MMDB data (default: false)
+	IPv6MinPrefix    *int          `toml:"ipv6_min_prefix"`    // Minimum IPv6 prefix length - truncates more specific prefixes (optional, default: nil = no normalization)
 }
 
 // CSVConfig defines CSV output options.
@@ -275,6 +276,17 @@ func validate(config *Config) error {
 		return errors.New(
 			"output.ipv4_file and output.ipv6_file cannot be used together with output.file",
 		)
+	}
+
+	// Validate IPv6 minimum prefix length
+	if config.Output.IPv6MinPrefix != nil {
+		minPrefix := *config.Output.IPv6MinPrefix
+		if minPrefix < 0 || minPrefix > 128 {
+			return fmt.Errorf(
+				"output.ipv6_min_prefix must be between 0 and 128, got %d",
+				minPrefix,
+			)
+		}
 	}
 
 	// Validate Parquet compression

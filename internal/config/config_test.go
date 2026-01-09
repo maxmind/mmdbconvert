@@ -1128,6 +1128,44 @@ path = ["country", "iso_code"]
 `,
 			expectError: "ipv6_bucket_type must be 'string' or 'int'",
 		},
+		{
+			name: "invalid ipv6_min_prefix too small",
+			toml: `
+[output]
+format = "csv"
+file = "output.csv"
+ipv6_min_prefix = -1
+
+[[databases]]
+name = "geo"
+path = "/path/to/geo.mmdb"
+
+[[columns]]
+name = "country"
+database = "geo"
+path = ["country", "iso_code"]
+`,
+			expectError: "output.ipv6_min_prefix must be between 0 and 128",
+		},
+		{
+			name: "invalid ipv6_min_prefix too large",
+			toml: `
+[output]
+format = "csv"
+file = "output.csv"
+ipv6_min_prefix = 129
+
+[[databases]]
+name = "geo"
+path = "/path/to/geo.mmdb"
+
+[[columns]]
+name = "country"
+database = "geo"
+path = ["country", "iso_code"]
+`,
+			expectError: "output.ipv6_min_prefix must be between 0 and 128",
+		},
 	}
 
 	for _, tt := range tests {

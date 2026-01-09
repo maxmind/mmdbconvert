@@ -761,3 +761,80 @@ func mmdbEqual(a, b mmdbtype.DataType) bool {
 	}
 	return a.Equal(b)
 }
+
+func TestMerger_IPv6Normalization(t *testing.T) {
+	// Test that IPv6 prefix normalization is applied when configured
+	// This test uses synthetic data without requiring actual MMDB files
+
+	// Create a minimal mock to test normalization behavior
+	// We can't fully test without MMDB files, but we can test the normalizePrefix method
+
+	cfg := &config.Config{
+		Output: config.OutputConfig{
+			IPv6MinPrefix: intPtr(64),
+		},
+		Columns: []config.Column{},
+	}
+
+	merger := &Merger{
+		config: cfg,
+	}
+
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "IPv6 /128 normalized to /64",
+			input:    "2001:db8::1/128",
+			expected: "2001:db8::/64",
+		},
+		{
+			name:     "IPv6 /96 normalized to /64",
+			input:    "2001:db8::abcd:1234/96",
+			expected: "2001:db8::/64",
+		},
+		{
+			name:     "IPv6 /48 unchanged (broader than minimum)",
+			input:    "2001:db8::/48",
+			expected: "2001:db8::/48",
+		},
+		{
+			name:     "IPv4 unchanged",
+			input:    "192.168.1.1/32",
+			expected: "192.168.1.1/32",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			input := netip.MustParsePrefix(tt.input)
+			expected := netip.MustParsePrefix(tt.expected)
+			result := merger.normalizePrefix(input)
+			assert.Equal(t, expected, result)
+		})
+	}
+}
+
+func TestMerger_IPv6NormalizationDisabled(t *testing.T) {
+	// Test that normalization is not applied when IPv6MinPrefix is nil
+	cfg := &config.Config{
+		Output: config.OutputConfig{
+			IPv6MinPrefix: nil, // Normalization disabled
+		},
+		Columns: []config.Column{},
+	}
+
+	merger := &Merger{
+		config: cfg,
+	}
+
+	input := netip.MustParsePrefix("2001:db8::1/128")
+	result := merger.normalizePrefix(input)
+	assert.Equal(t, input, result, "prefix should be unchanged when normalization is disabled")
+}
+
+func intPtr(v int) *int {
+	return &v
+}
