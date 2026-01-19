@@ -25,11 +25,11 @@ func TestRun_ValidConfig(t *testing.T) {
 	configContent := `
 [output]
 format = "csv"
-file = "` + outputFile + `"
+file = "` + tomlPath(outputFile) + `"
 
 [[databases]]
 name = "city"
-path = "` + filepath.Join(absTestDataDir, "GeoIP2-City-Test.mmdb") + `"
+path = "` + tomlPath(filepath.Join(absTestDataDir, "GeoIP2-City-Test.mmdb")) + `"
 
 [[columns]]
 name = "country_code"
@@ -66,11 +66,11 @@ func TestRun_DisableCache(t *testing.T) {
 	configContent := `
 [output]
 format = "csv"
-file = "` + outputFile + `"
+file = "` + tomlPath(outputFile) + `"
 
 [[databases]]
 name = "city"
-path = "` + filepath.Join(absTestDataDir, "GeoIP2-City-Test.mmdb") + `"
+path = "` + tomlPath(filepath.Join(absTestDataDir, "GeoIP2-City-Test.mmdb")) + `"
 
 [[columns]]
 name = "country_code"
@@ -125,7 +125,7 @@ func TestRun_NonexistentDatabase(t *testing.T) {
 	configContent := `
 [output]
 format = "csv"
-file = "` + outputFile + `"
+file = "` + tomlPath(outputFile) + `"
 
 [[databases]]
 name = "city"
@@ -155,11 +155,11 @@ func TestRun_ParquetOutput(t *testing.T) {
 	configContent := `
 [output]
 format = "parquet"
-file = "` + outputFile + `"
+file = "` + tomlPath(outputFile) + `"
 
 [[databases]]
 name = "city"
-path = "` + filepath.Join(absTestDataDir, "GeoIP2-City-Test.mmdb") + `"
+path = "` + tomlPath(filepath.Join(absTestDataDir, "GeoIP2-City-Test.mmdb")) + `"
 
 [network]
 columns = [
@@ -196,12 +196,12 @@ func TestRun_SplitIPv4IPv6Output(t *testing.T) {
 	configContent := `
 [output]
 format = "csv"
-ipv4_file = "` + ipv4File + `"
-ipv6_file = "` + ipv6File + `"
+ipv4_file = "` + tomlPath(ipv4File) + `"
+ipv6_file = "` + tomlPath(ipv6File) + `"
 
 [[databases]]
 name = "city"
-path = "` + filepath.Join(absTestDataDir, "GeoIP2-City-Test.mmdb") + `"
+path = "` + tomlPath(filepath.Join(absTestDataDir, "GeoIP2-City-Test.mmdb")) + `"
 
 [[columns]]
 name = "country_code"
@@ -331,4 +331,12 @@ func openTestReaders(t *testing.T, cfg *config.Config) *mmdb.Readers {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = readers.Close() })
 	return readers
+}
+
+// tomlPath converts a file path to use forward slashes for embedding in TOML.
+// This is necessary because backslashes in TOML strings are escape sequences,
+// and Windows paths like "D:\path\to\file" would be misinterpreted.
+// Forward slashes work as path separators on all platforms including Windows.
+func tomlPath(path string) string {
+	return filepath.ToSlash(path)
 }
