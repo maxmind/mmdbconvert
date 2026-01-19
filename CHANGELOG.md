@@ -26,6 +26,9 @@ and this project adheres to
   configure bucket prefix lengths (default: 16).
 - New CSV and Parquet option `ipv6_bucket_type` to configure the IPv6 network
   bucket column format (default: string).
+- Public Go library API. The package now exposes `Run()` and `Options` at the
+  module root, allowing internal tools to import mmdbconvert directly instead of
+  shelling out to the CLI binary.
 
 ## [0.1.0] - 2025-11-07
 
