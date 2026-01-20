@@ -2,20 +2,13 @@
 package main
 
 import (
-	"errors"
 	"flag"
 	"fmt"
-	"io"
 	"os"
-	"path/filepath"
 	"runtime/pprof"
-	"strings"
 	"time"
 
-	"github.com/maxmind/mmdbconvert/internal/config"
-	"github.com/maxmind/mmdbconvert/internal/merger"
-	"github.com/maxmind/mmdbconvert/internal/mmdb"
-	"github.com/maxmind/mmdbconvert/internal/writer"
+	"github.com/maxmind/mmdbconvert"
 )
 
 const version = "0.1.0"
@@ -126,359 +119,27 @@ func run(configPath string, quiet, disableCache bool) error {
 	if !quiet {
 		fmt.Printf("mmdbconvert v%s\n", version)
 		fmt.Printf("Loading configuration from %s...\n", configPath)
-	}
-
-	// Load configuration
-	cfg, err := config.LoadConfig(configPath)
-	if err != nil {
-		return fmt.Errorf("loading config: %w", err)
-	}
-
-	// Override DisableCache from command-line flag if provided
-	// Command-line flag takes precedence over config file
-	if disableCache {
-		cfg.DisableCache = true
-	}
-
-	if !quiet {
-		fmt.Printf("Output format: %s\n", cfg.Output.Format)
-		if cfg.Output.File != "" {
-			fmt.Printf("Output file: %s\n", cfg.Output.File)
-		} else {
-			fmt.Printf("Output files: IPv4=%s, IPv6=%s\n", cfg.Output.IPv4File, cfg.Output.IPv6File)
-		}
-		fmt.Printf("Databases: %d\n", len(cfg.Databases))
-		fmt.Printf("Data columns: %d\n", len(cfg.Columns))
-		fmt.Printf("Network columns: %d\n", len(cfg.Network.Columns))
-		fmt.Println()
-	}
-
-	// Open MMDB databases
-	if !quiet {
-		fmt.Println("Opening MMDB databases...")
-	}
-
-	databases := map[string]string{}
-	for _, db := range cfg.Databases {
-		databases[db.Name] = db.Path
-		if !quiet {
-			fmt.Printf("  - %s: %s\n", db.Name, db.Path)
-		}
-	}
-
-	readers, err := mmdb.OpenDatabases(databases)
-	if err != nil {
-		return fmt.Errorf("opening databases: %w", err)
-	}
-	defer readers.Close()
-
-	if err := validateParquetNetworkColumns(cfg, readers); err != nil {
-		return fmt.Errorf("validating network columns: %w", err)
-	}
-
-	rowWriter, closers, outputPaths, err := prepareRowWriter(cfg, readers, quiet)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		for _, closer := range closers {
-			closer.Close()
-		}
-	}()
-
-	if !quiet {
 		fmt.Println("Merging databases and writing output...")
-		if cfg.DisableCache {
+		if disableCache {
 			fmt.Println("  (unmarshaler caching disabled)")
 		}
 	}
 
-	// Create merger and run
-	m, err := merger.NewMerger(readers, cfg, rowWriter)
+	err := mmdbconvert.Run(mmdbconvert.Options{
+		ConfigPath:   configPath,
+		DisableCache: disableCache,
+	})
 	if err != nil {
-		return fmt.Errorf("creating merger: %w", err)
-	}
-	if err := m.Merge(); err != nil {
-		return fmt.Errorf("merging databases: %w", err)
-	}
-
-	// Flush writer
-	if flusher, ok := rowWriter.(interface{ Flush() error }); ok {
-		if err := flusher.Flush(); err != nil {
-			return fmt.Errorf("flushing output: %w", err)
-		}
+		return err
 	}
 
 	if !quiet {
 		elapsed := time.Since(startTime)
 		fmt.Println()
 		fmt.Printf("✓ Successfully completed in %v\n", elapsed.Round(time.Millisecond))
-		if len(outputPaths) == 1 {
-			fmt.Printf("Output written to: %s\n", outputPaths[0])
-		} else {
-			fmt.Println("Output written to:")
-			for _, path := range outputPaths {
-				fmt.Printf("  - %s\n", path)
-			}
-		}
 	}
 
 	return nil
-}
-
-func prepareRowWriter(
-	cfg *config.Config,
-	readers *mmdb.Readers,
-	quiet bool,
-) (merger.RowWriter, []io.Closer, []string, error) {
-	var (
-		closers     []io.Closer
-		outputPaths []string
-	)
-
-	closeAll := func() {
-		for _, closer := range closers {
-			closer.Close()
-		}
-	}
-
-	switch cfg.Output.Format {
-	case "csv":
-		if cfg.Output.IPv4File != "" && cfg.Output.IPv6File != "" {
-			if !quiet {
-				fmt.Println()
-				fmt.Println("Creating output files...")
-			}
-			ipv4Path, ipv6Path := splitConfiguredPaths(
-				cfg.Output.File,
-				cfg.Output.IPv4File,
-				cfg.Output.IPv6File,
-			)
-			ipv4File, err := createOutputFile(ipv4Path)
-			if err != nil {
-				closeAll()
-				return nil, nil, nil, fmt.Errorf("creating IPv4 output file: %w", err)
-			}
-			closers = append(closers, ipv4File)
-			outputPaths = append(outputPaths, ipv4Path)
-
-			ipv6File, err := createOutputFile(ipv6Path)
-			if err != nil {
-				closeAll()
-				return nil, nil, nil, fmt.Errorf("creating IPv6 output file: %w", err)
-			}
-			closers = append(closers, ipv6File)
-			outputPaths = append(outputPaths, ipv6Path)
-
-			return writer.NewSplitRowWriter(
-				writer.NewCSVWriter(ipv4File, cfg),
-				writer.NewCSVWriter(ipv6File, cfg),
-			), closers, outputPaths, nil
-		}
-
-		if !quiet {
-			fmt.Println()
-			fmt.Println("Creating output file...")
-		}
-		outputFile, err := createOutputFile(cfg.Output.File)
-		if err != nil {
-			closeAll()
-			return nil, nil, nil, fmt.Errorf("creating output file: %w", err)
-		}
-		closers = append(closers, outputFile)
-		outputPaths = append(outputPaths, cfg.Output.File)
-		return writer.NewCSVWriter(outputFile, cfg), closers, outputPaths, nil
-
-	case "parquet":
-		if cfg.Output.IPv4File != "" && cfg.Output.IPv6File != "" {
-			if !quiet {
-				fmt.Println()
-				fmt.Println("Creating output files...")
-			}
-			ipv4Path, ipv6Path := splitConfiguredPaths(
-				cfg.Output.File,
-				cfg.Output.IPv4File,
-				cfg.Output.IPv6File,
-			)
-
-			ipv4File, err := createOutputFile(ipv4Path)
-			if err != nil {
-				closeAll()
-				return nil, nil, nil, fmt.Errorf("creating IPv4 output file: %w", err)
-			}
-			closers = append(closers, ipv4File)
-			outputPaths = append(outputPaths, ipv4Path)
-
-			ipv6File, err := createOutputFile(ipv6Path)
-			if err != nil {
-				closeAll()
-				return nil, nil, nil, fmt.Errorf("creating IPv6 output file: %w", err)
-			}
-			closers = append(closers, ipv6File)
-			outputPaths = append(outputPaths, ipv6Path)
-
-			ipv4Writer, err := writer.NewParquetWriterWithIPVersion(
-				ipv4File,
-				cfg,
-				writer.IPVersion4,
-			)
-			if err != nil {
-				closeAll()
-				return nil, nil, nil, fmt.Errorf("creating IPv4 Parquet writer: %w", err)
-			}
-			ipv6Writer, err := writer.NewParquetWriterWithIPVersion(
-				ipv6File,
-				cfg,
-				writer.IPVersion6,
-			)
-			if err != nil {
-				closeAll()
-				return nil, nil, nil, fmt.Errorf("creating IPv6 Parquet writer: %w", err)
-			}
-			return writer.NewSplitRowWriter(ipv4Writer, ipv6Writer), closers, outputPaths, nil
-		}
-
-		if !quiet {
-			fmt.Println()
-			fmt.Println("Creating output file...")
-		}
-		outputFile, err := createOutputFile(cfg.Output.File)
-		if err != nil {
-			closeAll()
-			return nil, nil, nil, fmt.Errorf("creating output file: %w", err)
-		}
-		closers = append(closers, outputFile)
-		outputPaths = append(outputPaths, cfg.Output.File)
-
-		parquetWriter, err := writer.NewParquetWriter(outputFile, cfg)
-		if err != nil {
-			closeAll()
-			return nil, nil, nil, fmt.Errorf("creating Parquet writer: %w", err)
-		}
-		return parquetWriter, closers, outputPaths, nil
-
-	case "mmdb":
-		if !quiet {
-			fmt.Println()
-			fmt.Println("Creating output file...")
-		}
-
-		// Detect IP version from databases
-		ipVersion, err := detectIPVersionFromDatabases(cfg, readers)
-		if err != nil {
-			closeAll()
-			return nil, nil, nil, fmt.Errorf("detecting IP version: %w", err)
-		}
-
-		mmdbWriter, err := writer.NewMMDBWriter(cfg.Output.File, cfg, ipVersion)
-		if err != nil {
-			closeAll()
-			return nil, nil, nil, fmt.Errorf("creating MMDB writer: %w", err)
-		}
-
-		outputPaths = append(outputPaths, cfg.Output.File)
-		return mmdbWriter, closers, outputPaths, nil
-	}
-
-	closeAll()
-	return nil, nil, nil, fmt.Errorf("unsupported output format: %s", cfg.Output.Format)
-}
-
-func createOutputFile(path string) (*os.File, error) {
-	// #nosec G304 -- paths come from trusted configuration
-	file, err := os.Create(path)
-	if err != nil {
-		return nil, fmt.Errorf("creating %s: %w", path, err)
-	}
-	return file, nil
-}
-
-func detectIPVersionFromDatabases(cfg *config.Config, readers *mmdb.Readers) (int, error) {
-	// Get the first database from config to detect IP version
-	// In practice, all databases in the merge should have the same IP version
-	// due to validation in merger
-	if len(cfg.Databases) == 0 {
-		return 0, errors.New("no databases configured")
-	}
-
-	firstDB := cfg.Databases[0].Name
-	reader, ok := readers.Get(firstDB)
-	if !ok {
-		return 0, fmt.Errorf("database '%s' not found", firstDB)
-	}
-
-	metadata := reader.Metadata()
-	//nolint:gosec // IPVersion is always 4 or 6, no overflow risk
-	ipVersion := int(metadata.IPVersion)
-
-	if ipVersion != 4 && ipVersion != 6 {
-		return 0, fmt.Errorf("invalid IP version %d in database '%s'", ipVersion, firstDB)
-	}
-
-	return ipVersion, nil
-}
-
-func splitConfiguredPaths(base, ipv4Override, ipv6Override string) (ipv4, ipv6 string) {
-	ext := filepath.Ext(base)
-	name := strings.TrimSuffix(base, ext)
-	if name == "" {
-		name = base
-	}
-	if ext == "" {
-		ext = ".parquet"
-	}
-
-	defaultIPv4 := fmt.Sprintf("%s_ipv4%s", name, ext)
-	defaultIPv6 := fmt.Sprintf("%s_ipv6%s", name, ext)
-
-	ipv4 = ipv4Override
-	if ipv4 == "" {
-		ipv4 = defaultIPv4
-	}
-	ipv6 = ipv6Override
-	if ipv6 == "" {
-		ipv6 = defaultIPv6
-	}
-
-	return ipv4, ipv6
-}
-
-func validateParquetNetworkColumns(cfg *config.Config, readers *mmdb.Readers) error {
-	if cfg.Output.Format != "parquet" {
-		return nil
-	}
-
-	if !hasIntegerNetworkColumns(cfg.Network.Columns) {
-		return nil
-	}
-
-	// Already split output, so integer columns are safe (each writer enforces a single IP family).
-	if cfg.Output.IPv4File != "" && cfg.Output.IPv6File != "" {
-		return nil
-	}
-
-	ipVersion, err := detectIPVersionFromDatabases(cfg, readers)
-	if err != nil {
-		return err
-	}
-
-	if ipVersion == 6 {
-		return errors.New(
-			"network column types 'start_int' and 'end_int' require split IPv4/IPv6 outputs when processing IPv6 databases; set output.ipv4_file and output.ipv6_file or switch to start_ip/end_ip",
-		)
-	}
-
-	return nil
-}
-
-func hasIntegerNetworkColumns(cols []config.NetworkColumn) bool {
-	for _, col := range cols {
-		switch col.Type {
-		case writer.NetworkColumnStartInt, writer.NetworkColumnEndInt:
-			return true
-		}
-	}
-	return false
 }
 
 func usage() {
