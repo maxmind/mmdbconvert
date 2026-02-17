@@ -395,7 +395,6 @@ func convertToParquetType(value any, typeHint string) (any, error) {
 			if v > 9223372036854775807 {
 				return nil, fmt.Errorf("uint64 value %d overflows int64", v)
 			}
-			//nolint:gosec // Overflow checked above
 			return int64(v), nil
 		case *mmdbtype.Uint128:
 			i := (*big.Int)(v)
