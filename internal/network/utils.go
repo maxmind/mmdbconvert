@@ -45,7 +45,6 @@ func IPv6BucketToInt64(addr netip.Addr) (int64, error) {
 	bytes := addr.As16()
 	// Read first 64 bits, then right-shift by 4 to get top 60 bits
 	val := binary.BigEndian.Uint64(bytes[:8])
-	//nolint:gosec // 60-bit value always fits in positive int64
 	return int64(val >> 4), nil
 }
 
