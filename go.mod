@@ -5,7 +5,7 @@ go 1.25.3
 require (
 	github.com/maxmind/mmdbwriter v1.2.0
 	github.com/oschwald/maxminddb-golang/v2 v2.1.1
-	github.com/parquet-go/parquet-go v0.27.0
+	github.com/parquet-go/parquet-go v0.28.0
 	github.com/pelletier/go-toml/v2 v2.2.4
 	github.com/stretchr/testify v1.11.1
 	go4.org/netipx v0.0.0-20231129151722-fdeea329fbba
