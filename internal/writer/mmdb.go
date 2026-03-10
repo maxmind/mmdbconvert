@@ -97,8 +97,16 @@ func (w *MMDBWriter) Flush() error {
 func (w *MMDBWriter) buildNestedData(flatData []mmdbtype.DataType) (mmdbtype.Map, error) {
 	root := make(mmdbtype.Map)
 
+	if len(flatData) < len(w.config.Columns) {
+		return nil, fmt.Errorf(
+			"data slice length %d is less than column count %d",
+			len(flatData),
+			len(w.config.Columns),
+		)
+	}
+
 	for i, col := range w.config.Columns {
-		value := flatData[i]
+		value := flatData[i] //nolint:gosec // G602: bounds checked above
 		if value == nil {
 			continue
 		}
