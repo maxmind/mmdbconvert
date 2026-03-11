@@ -153,6 +153,14 @@ func (w *CSVWriter) writeSingleRow(
 	}
 
 	// Add data column values (in config order)
+	if len(data) < len(w.config.Columns) {
+		return fmt.Errorf(
+			"data slice length %d is less than column count %d",
+			len(data),
+			len(w.config.Columns),
+		)
+	}
+
 	for i, col := range w.config.Columns {
 		value := data[i]
 		strValue, err := convertToString(value)
@@ -225,8 +233,16 @@ func (w *CSVWriter) WriteRange(start, end netip.Addr, data []mmdbtype.DataType) 
 		row = append(row, value)
 	}
 
+	if len(data) < len(w.config.Columns) {
+		return fmt.Errorf(
+			"data slice length %d is less than column count %d",
+			len(data),
+			len(w.config.Columns),
+		)
+	}
+
 	for i, col := range w.config.Columns {
-		value := data[i]
+		value := data[i] //nolint:gosec // G602: bounds checked above
 		strValue, err := convertToString(value)
 		if err != nil {
 			return fmt.Errorf("converting column '%s' to string: %w", col.Name, err)

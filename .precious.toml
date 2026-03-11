@@ -1,3 +1,7 @@
+exclude = [
+    ".git",
+]
+
 [commands.golangci-lint-fmt]
 type = "both"
 cmd = ["golangci-lint", "fmt"]
@@ -12,7 +16,7 @@ type = "both"
 cmd = ["golangci-lint", "run"]
 tidy-flags = ["--fix"]
 ok-exit-codes = 0
-expect-stderr = true
+ignore-stderr = ".*"
 invoke = "once"
 path-args = "dir"
 include = ["**/*.go"]
@@ -20,22 +24,10 @@ exclude = ["testdata/MaxMind-DB/**"]
 
 [commands.prettier-markdown]
 type = "both"
-include = [
-    "**/*.md"
-]
-exclude = [
-    "testdata/MaxMind-DB/**"
-]
-cmd = [
-    "npx",
-    "prettier",
-    "--parser",
-    "markdown",
-    "--prose-wrap",
-    "always",
-]
-lint-flags = "--check"
-tidy-flags = "--write"
+cmd = ["prettier", "--prose-wrap", "always"]
+lint-flags = ["--check"]
+tidy-flags = ["--write"]
+path-args = "absolute-file"
+include = "**/*.md"
+exclude = ["testdata/MaxMind-DB/**"]
 ok-exit-codes = 0
-lint-failure-exit-codes = 1
-ignore-stderr = ["Code style issues", "npm warn exec"]
