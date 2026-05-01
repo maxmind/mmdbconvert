@@ -66,5 +66,5 @@ and this project adheres to
 - Multi-database merge validation
 - Performance testing (< 10ms for small databases, 7MB memory)
 
-[unreleased]: https://github.com/maxmind/mmdbconvert/compare/v0.1.0...HEAD
+[0.2.0]: https://github.com/maxmind/mmdbconvert/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/maxmind/mmdbconvert/releases/tag/v0.1.0
