@@ -586,7 +586,7 @@ This ensures accurate IP lookups with no ambiguity.
 
 ## License
 
-Copyright 2025 MaxMind, Inc.
+Copyright 2025-2026 MaxMind, Inc.
 
 This project is licensed under either of:
 
