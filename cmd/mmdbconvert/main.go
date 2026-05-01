@@ -11,7 +11,9 @@ import (
 	"github.com/maxmind/mmdbconvert"
 )
 
-const version = "0.1.0"
+const unknownVersion = "unknown"
+
+var version = unknownVersion
 
 func main() {
 	// Define command-line flags
