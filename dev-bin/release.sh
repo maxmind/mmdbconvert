@@ -98,5 +98,3 @@ $notes"
 git tag -a -m "$message" "$tag"
 
 git push --tags
-
-gh release create --target "$current_branch" -t "$version" -n "$notes" "$tag"
