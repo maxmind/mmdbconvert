@@ -9,7 +9,7 @@ Parquet, or MMDB format.
 
 ## Features
 
-- ✅ **Merge multiple MMDB databases** - Combine GeoIP2 databases (e.g.,
+- ✅ **Merge multiple MMDB databases** - Combine GeoIP databases (e.g.,
   Enterprise + Anonymous IP)
 - ✅ **Non-overlapping networks** - Automatically resolves overlapping networks
   to smallest blocks
@@ -324,7 +324,7 @@ examples and performance optimization guide.**
 
 ### Merging Multiple Databases
 
-Combine GeoIP2 Enterprise with Anonymous IP data:
+Combine GeoIP Enterprise with Anonymous IP data:
 
 ```toml
 [output]
@@ -503,7 +503,7 @@ type = "bool"           # Boolean values
 
 ### Merging Enterprise + Anonymous IP
 
-Merging GeoIP2 Enterprise with GeoIP2 Anonymous IP to enrich traffic logs. The
+Merging GeoIP Enterprise with GeoIP Anonymous IP to enrich traffic logs. The
 merged database provides:
 
 - Geographic location data (country, city, coordinates)
@@ -582,7 +582,7 @@ This ensures accurate IP lookups with no ambiguity.
 ## Requirements
 
 - Go 1.25 or later
-- MaxMind MMDB database files (GeoIP2, GeoLite2, etc.)
+- MaxMind MMDB database files (GeoIP, GeoLite, etc.)
 
 ## License
 
