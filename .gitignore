@@ -17,6 +17,9 @@
 *.out
 coverage.txt
 
+# Link checker cache
+.lycheecache
+
 # Development files
 /plan.md
 .claude
