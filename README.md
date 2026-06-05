@@ -3,9 +3,9 @@
 A command-line tool to merge multiple MaxMind MMDB databases and export to CSV,
 Parquet, or MMDB format.
 
-[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Go Version](https://img.shields.io/badge/Go-1.25%2B-00ADD8?logo=go)](https://golang.org)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/license/Apache-2.0)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/license/MIT)
+[![Go Version](https://img.shields.io/badge/Go-1.25%2B-00ADD8?logo=go)](https://go.dev/)
 
 ## Features
 
@@ -591,8 +591,8 @@ Copyright 2025-2026 MaxMind, Inc.
 This project is licensed under either of:
 
 - Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or
-  http://www.apache.org/licenses/LICENSE-2.0)
-- MIT License ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
+  https://www.apache.org/licenses/LICENSE-2.0)
+- MIT License ([LICENSE-MIT](LICENSE-MIT) or https://opensource.org/license/MIT)
 
 at your option.
 
@@ -624,4 +624,4 @@ Built with:
 - **Issues:** [GitHub Issues](https://github.com/maxmind/mmdbconvert/issues)
 - **Documentation:** [docs/](docs/)
 - **MaxMind Support:**
-  [https://support.maxmind.com](https://support.maxmind.com)
+  [https://support.maxmind.com/knowledge-base](https://support.maxmind.com/knowledge-base)
