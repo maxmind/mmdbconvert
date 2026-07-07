@@ -13,12 +13,50 @@ import (
 )
 
 const (
-	formatCSV     = "csv"
-	formatParquet = "parquet"
-	formatMMDB    = "mmdb"
+	// OutputFormatCSV writes CSV output.
+	OutputFormatCSV = "csv"
+	// OutputFormatParquet writes Parquet output.
+	OutputFormatParquet = "parquet"
+	// OutputFormatMMDB writes MMDB output.
+	OutputFormatMMDB = "mmdb"
+
+	// NetworkColumnTypeCIDR writes network prefixes in CIDR notation.
+	NetworkColumnTypeCIDR = "cidr"
+	// NetworkColumnTypeStartIP writes the first IP address in a network.
+	NetworkColumnTypeStartIP = "start_ip"
+	// NetworkColumnTypeEndIP writes the last IP address in a network.
+	NetworkColumnTypeEndIP = "end_ip"
+	// NetworkColumnTypeStartInt writes the first IP address as an integer.
+	NetworkColumnTypeStartInt = "start_int"
+	// NetworkColumnTypeEndInt writes the last IP address as an integer.
+	NetworkColumnTypeEndInt = "end_int"
+	// NetworkColumnTypeBucket writes bucket values for accelerated lookups.
+	NetworkColumnTypeBucket = "network_bucket"
+
+	// ColumnTypeString coerces data columns to strings.
+	ColumnTypeString = "string"
+	// ColumnTypeInt64 coerces data columns to int64.
+	ColumnTypeInt64 = "int64"
+	// ColumnTypeFloat64 coerces data columns to float64.
+	ColumnTypeFloat64 = "float64"
+	// ColumnTypeBool coerces data columns to bool.
+	ColumnTypeBool = "bool"
+	// ColumnTypeBinary coerces data columns to binary.
+	ColumnTypeBinary = "binary"
+
+	// ParquetCompressionNone uses no compression.
+	ParquetCompressionNone = "none"
+	// ParquetCompressionSnappy uses snappy compression.
+	ParquetCompressionSnappy = "snappy"
+	// ParquetCompressionGzip uses gzip compression.
+	ParquetCompressionGzip = "gzip"
+	// ParquetCompressionLz4 uses lz4 compression.
+	ParquetCompressionLz4 = "lz4"
+	// ParquetCompressionZstd uses Zstd compression.
+	ParquetCompressionZstd = "zstd"
 
 	// IPv6BucketTypeString stores IPv6 bucket values as hex strings.
-	IPv6BucketTypeString = "string"
+	IPv6BucketTypeString = ColumnTypeString
 	// IPv6BucketTypeInt stores IPv6 bucket values as int64 (first 60 bits).
 	IPv6BucketTypeInt = "int"
 )
@@ -189,7 +227,7 @@ func applyDefaults(config *Config) {
 
 	// Parquet defaults
 	if config.Output.Parquet.Compression == "" {
-		config.Output.Parquet.Compression = "snappy"
+		config.Output.Parquet.Compression = ParquetCompressionSnappy
 	}
 	if config.Output.Parquet.RowGroupSize == 0 {
 		config.Output.Parquet.RowGroupSize = 500000
@@ -205,7 +243,7 @@ func applyDefaults(config *Config) {
 	}
 
 	// MMDB defaults
-	if config.Output.Format == formatMMDB {
+	if config.Output.Format == OutputFormatMMDB {
 		if config.Output.MMDB.RecordSize == nil {
 			config.Output.MMDB.RecordSize = intPtr(28)
 		}
@@ -225,19 +263,19 @@ func applyDefaults(config *Config) {
 	// Network column defaults - apply format-specific defaults if no columns specified
 	if len(config.Network.Columns) == 0 {
 		switch config.Output.Format {
-		case formatParquet:
+		case OutputFormatParquet:
 			// Parquet default: integer columns for query performance
 			config.Network.Columns = []NetworkColumn{
-				{Name: "start_int", Type: "start_int"},
-				{Name: "end_int", Type: "end_int"},
+				{Name: NetworkColumnTypeStartInt, Type: NetworkColumnTypeStartInt},
+				{Name: NetworkColumnTypeEndInt, Type: NetworkColumnTypeEndInt},
 			}
-		case formatMMDB:
+		case OutputFormatMMDB:
 			// MMDB default: no network columns (data written by prefix)
 			config.Network.Columns = []NetworkColumn{}
 		default:
 			// CSV default: human-readable CIDR
 			config.Network.Columns = []NetworkColumn{
-				{Name: "network", Type: "cidr"},
+				{Name: "network", Type: NetworkColumnTypeCIDR},
 			}
 		}
 	}
@@ -259,8 +297,8 @@ func validate(config *Config) error {
 	if config.Output.Format == "" {
 		return errors.New("output.format is required")
 	}
-	if config.Output.Format != formatCSV && config.Output.Format != formatParquet &&
-		config.Output.Format != formatMMDB {
+	if config.Output.Format != OutputFormatCSV && config.Output.Format != OutputFormatParquet &&
+		config.Output.Format != OutputFormatMMDB {
 		return fmt.Errorf(
 			"output.format must be 'csv', 'parquet', or 'mmdb', got '%s'",
 			config.Output.Format,
@@ -278,9 +316,11 @@ func validate(config *Config) error {
 	}
 
 	// Validate Parquet compression
-	if config.Output.Format == formatParquet {
+	if config.Output.Format == OutputFormatParquet {
 		validCompressions := map[string]bool{
-			"none": true, "snappy": true, "gzip": true, "lz4": true, "zstd": true,
+			ParquetCompressionNone: true, ParquetCompressionSnappy: true,
+			ParquetCompressionGzip: true, ParquetCompressionLz4: true,
+			ParquetCompressionZstd: true,
 		}
 		if !validCompressions[config.Output.Parquet.Compression] {
 			return fmt.Errorf(
@@ -291,7 +331,7 @@ func validate(config *Config) error {
 	}
 
 	// Validate MMDB configuration
-	if config.Output.Format == formatMMDB {
+	if config.Output.Format == OutputFormatMMDB {
 		if config.Output.MMDB.DatabaseType == "" {
 			return errors.New("output.mmdb.database_type is required for MMDB output")
 		}
@@ -310,7 +350,7 @@ func validate(config *Config) error {
 	}
 
 	// Validate type hints only allowed for Parquet
-	if config.Output.Format == formatCSV || config.Output.Format == formatMMDB {
+	if config.Output.Format == OutputFormatCSV || config.Output.Format == OutputFormatMMDB {
 		for _, col := range config.Columns {
 			if col.Type != "" {
 				return fmt.Errorf(
@@ -343,8 +383,9 @@ func validate(config *Config) error {
 
 	// Validate network columns
 	validNetworkTypes := map[string]bool{
-		"cidr": true, "start_ip": true, "end_ip": true, "start_int": true, "end_int": true,
-		"network_bucket": true,
+		NetworkColumnTypeCIDR: true, NetworkColumnTypeStartIP: true,
+		NetworkColumnTypeEndIP: true, NetworkColumnTypeStartInt: true,
+		NetworkColumnTypeEndInt: true, NetworkColumnTypeBucket: true,
 	}
 	networkColNames := map[mmdbtype.String]bool{}
 	hasBucketColumn := false
@@ -362,7 +403,7 @@ func validate(config *Config) error {
 				col.Name,
 			)
 		}
-		if col.Type == "network_bucket" {
+		if col.Type == NetworkColumnTypeBucket {
 			hasBucketColumn = true
 		}
 		if networkColNames[col.Name] {
@@ -372,7 +413,7 @@ func validate(config *Config) error {
 	}
 
 	if hasBucketColumn {
-		if config.Output.Format == formatMMDB {
+		if config.Output.Format == OutputFormatMMDB {
 			return errors.New(
 				"network_bucket column type is only supported for CSV and Parquet output",
 			)
@@ -393,7 +434,8 @@ func validate(config *Config) error {
 
 	// Validate data columns
 	validDataTypes := map[string]bool{
-		"": true, "string": true, "int64": true, "float64": true, "bool": true, "binary": true,
+		"": true, ColumnTypeString: true, ColumnTypeInt64: true,
+		ColumnTypeFloat64: true, ColumnTypeBool: true, ColumnTypeBinary: true,
 	}
 	dataColNames := map[mmdbtype.String]bool{}
 	for _, col := range config.Columns {
@@ -446,7 +488,7 @@ func validateBucketConfig(config *Config) error {
 	var ipv4BucketSize, ipv6BucketSize int
 	var ipv6BucketType string
 
-	if config.Output.Format == formatCSV {
+	if config.Output.Format == OutputFormatCSV {
 		ipv4BucketSize = config.Output.CSV.IPv4BucketSize
 		ipv6BucketSize = config.Output.CSV.IPv6BucketSize
 		ipv6BucketType = config.Output.CSV.IPv6BucketType

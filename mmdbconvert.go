@@ -96,7 +96,7 @@ func prepareRowWriter(
 	}
 
 	switch cfg.Output.Format {
-	case "csv":
+	case config.OutputFormatCSV:
 		if cfg.Output.IPv4File != "" && cfg.Output.IPv6File != "" {
 			ipv4Path, ipv6Path := splitConfiguredPaths(
 				cfg.Output.File,
@@ -131,7 +131,7 @@ func prepareRowWriter(
 		closers = append(closers, outputFile)
 		return writer.NewCSVWriter(outputFile, cfg), closers, nil
 
-	case "parquet":
+	case config.OutputFormatParquet:
 		if cfg.Output.IPv4File != "" && cfg.Output.IPv6File != "" {
 			ipv4Path, ipv6Path := splitConfiguredPaths(
 				cfg.Output.File,
@@ -188,7 +188,7 @@ func prepareRowWriter(
 		}
 		return parquetWriter, closers, nil
 
-	case "mmdb":
+	case config.OutputFormatMMDB:
 		ipVersion, err := detectIPVersionFromDatabases(cfg, readers)
 		if err != nil {
 			closeAll()
@@ -232,7 +232,6 @@ func detectIPVersionFromDatabases(cfg *config.Config, readers *mmdb.Readers) (in
 	}
 
 	metadata := reader.Metadata()
-	//nolint:gosec // IPVersion is always 4 or 6, no overflow risk
 	ipVersion := int(metadata.IPVersion)
 
 	if ipVersion != 4 && ipVersion != 6 {
@@ -268,7 +267,7 @@ func splitConfiguredPaths(base, ipv4Override, ipv6Override string) (ipv4, ipv6 s
 }
 
 func validateParquetNetworkColumns(cfg *config.Config, readers *mmdb.Readers) error {
-	if cfg.Output.Format != "parquet" {
+	if cfg.Output.Format != config.OutputFormatParquet {
 		return nil
 	}
 
@@ -298,7 +297,7 @@ func validateParquetNetworkColumns(cfg *config.Config, readers *mmdb.Readers) er
 func hasIntegerNetworkColumns(cols []config.NetworkColumn) bool {
 	for _, col := range cols {
 		switch col.Type {
-		case writer.NetworkColumnStartInt, writer.NetworkColumnEndInt:
+		case config.NetworkColumnTypeStartInt, config.NetworkColumnTypeEndInt:
 			return true
 		}
 	}
