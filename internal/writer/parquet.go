@@ -17,16 +17,12 @@ import (
 )
 
 const (
-	ipVersionAny = 0
-	ipVersion4   = 4
-	ipVersion6   = 6
-
 	// IPVersionAny represents a Parquet writer that accepts both IPv4 and IPv6 rows.
-	IPVersionAny = ipVersionAny
+	IPVersionAny = 0
 	// IPVersion4 constrains a Parquet writer to IPv4 rows.
-	IPVersion4 = ipVersion4
+	IPVersion4 = 4
 	// IPVersion6 constrains a Parquet writer to IPv6 rows.
-	IPVersion6 = ipVersion6
+	IPVersion6 = 6
 )
 
 // ParquetWriter writes merged MMDB data to Parquet format.
@@ -42,7 +38,7 @@ type ParquetWriter struct {
 
 // NewParquetWriter creates a new Parquet writer.
 func NewParquetWriter(w io.Writer, cfg *config.Config) (*ParquetWriter, error) {
-	return NewParquetWriterWithIPVersion(w, cfg, ipVersionAny)
+	return NewParquetWriterWithIPVersion(w, cfg, IPVersionAny)
 }
 
 // NewParquetWriterWithIPVersion creates a Parquet writer scoped to a specific IP version.
@@ -197,7 +193,7 @@ func (w *ParquetWriter) Flush() error {
 }
 
 // generateNetworkColumnValue generates the value for a network column.
-// bucket is only used for NetworkColumnBucket; for other column types it is ignored.
+// bucket is only used for config.NetworkColumnTypeBucket; for other column types it is ignored.
 func (w *ParquetWriter) generateNetworkColumnValue(
 	prefix netip.Prefix,
 	bucket netip.Prefix,
@@ -206,56 +202,56 @@ func (w *ParquetWriter) generateNetworkColumnValue(
 	addr := prefix.Addr()
 
 	switch colType {
-	case NetworkColumnCIDR:
+	case config.NetworkColumnTypeCIDR:
 		return prefix.String(), nil
 
-	case NetworkColumnStartIP:
+	case config.NetworkColumnTypeStartIP:
 		return addr.String(), nil
 
-	case NetworkColumnEndIP:
+	case config.NetworkColumnTypeEndIP:
 		endIP := netipx.PrefixLastIP(prefix)
 		return endIP.String(), nil
 
-	case NetworkColumnStartInt:
+	case config.NetworkColumnTypeStartInt:
 		if addr.Is4() {
-			if w.ipVersion == ipVersion6 {
+			if w.ipVersion == IPVersion6 {
 				return nil, errors.New("encountered IPv4 address in IPv6-specific writer")
 			}
 			return int64(network.IPv4ToUint32(addr)), nil
 		}
-		if w.ipVersion == ipVersion4 {
+		if w.ipVersion == IPVersion4 {
 			return nil, errors.New(
 				"start_int column type only supports IPv4 in IPv4-only Parquet files; configure output.ipv4_file and output.ipv6_file to emit IPv6 integer columns",
 			)
 		}
-		if w.ipVersion == ipVersion6 {
+		if w.ipVersion == IPVersion6 {
 			return ipv6IntBytes(addr), nil
 		}
 		return nil, errors.New(
 			"start_int column type only supports IPv4 unless you configure output.ipv4_file and output.ipv6_file",
 		)
 
-	case NetworkColumnEndInt:
+	case config.NetworkColumnTypeEndInt:
 		endIP := netipx.PrefixLastIP(prefix)
 		if endIP.Is4() {
-			if w.ipVersion == ipVersion6 {
+			if w.ipVersion == IPVersion6 {
 				return nil, errors.New("encountered IPv4 address in IPv6-specific writer")
 			}
 			return int64(network.IPv4ToUint32(endIP)), nil
 		}
-		if w.ipVersion == ipVersion4 {
+		if w.ipVersion == IPVersion4 {
 			return nil, errors.New(
 				"end_int column type only supports IPv4 in IPv4-only Parquet files; configure output.ipv4_file and output.ipv6_file to emit IPv6 integer columns",
 			)
 		}
-		if w.ipVersion == ipVersion6 {
+		if w.ipVersion == IPVersion6 {
 			return ipv6IntBytes(endIP), nil
 		}
 		return nil, errors.New(
 			"end_int column type only supports IPv4 unless you configure output.ipv4_file and output.ipv6_file",
 		)
 
-	case NetworkColumnBucket:
+	case config.NetworkColumnTypeBucket:
 		if !bucket.IsValid() {
 			return nil, errors.New("invalid bucket but network_bucket column requested")
 		}
@@ -316,19 +312,21 @@ func buildNetworkNode(
 	cfg *config.Config,
 ) (parquet.Node, error) {
 	switch col.Type {
-	case NetworkColumnCIDR, NetworkColumnStartIP, NetworkColumnEndIP:
+	case config.NetworkColumnTypeCIDR,
+		config.NetworkColumnTypeStartIP,
+		config.NetworkColumnTypeEndIP:
 		// String columns
 		return parquet.Optional(parquet.String()), nil
 
-	case NetworkColumnStartInt, NetworkColumnEndInt:
-		if ipVersion == ipVersion6 {
+	case config.NetworkColumnTypeStartInt, config.NetworkColumnTypeEndInt:
+		if ipVersion == IPVersion6 {
 			return parquet.Optional(parquet.Leaf(parquet.FixedLenByteArrayType(16))), nil
 		}
 		return parquet.Optional(parquet.Int(64)), nil
 
-	case NetworkColumnBucket:
+	case config.NetworkColumnTypeBucket:
 		// IPv6 bucket: string (hex) by default, int64 when explicitly configured
-		if ipVersion == ipVersion6 &&
+		if ipVersion == IPVersion6 &&
 			cfg.Output.Parquet.IPv6BucketType != config.IPv6BucketTypeInt {
 			return parquet.Optional(parquet.String()), nil
 		}
@@ -349,21 +347,21 @@ func ipv6IntBytes(addr netip.Addr) []byte {
 // buildDataNode builds a Parquet node for a data column.
 func buildDataNode(col config.Column) (parquet.Node, error) {
 	// Default to string if no type specified
-	if col.Type == "" || col.Type == "string" {
+	if col.Type == "" || col.Type == config.ColumnTypeString {
 		return parquet.Optional(parquet.String()), nil
 	}
 
 	switch col.Type {
-	case "int64":
+	case config.ColumnTypeInt64:
 		return parquet.Optional(parquet.Int(64)), nil
 
-	case "float64":
+	case config.ColumnTypeFloat64:
 		return parquet.Optional(parquet.Leaf(parquet.DoubleType)), nil
 
-	case "bool":
+	case config.ColumnTypeBool:
 		return parquet.Optional(parquet.Leaf(parquet.BooleanType)), nil
 
-	case "binary":
+	case config.ColumnTypeBinary:
 		return parquet.Optional(parquet.Leaf(parquet.ByteArrayType)), nil
 
 	default:
@@ -378,12 +376,12 @@ func convertToParquetType(value any, typeHint string) (any, error) {
 	}
 
 	// If no type hint, return as-is (will be string)
-	if typeHint == "" || typeHint == "string" {
+	if typeHint == "" || typeHint == config.ColumnTypeString {
 		return convertToString(value)
 	}
 
 	switch typeHint {
-	case "int64":
+	case config.ColumnTypeInt64:
 		switch v := value.(type) {
 		case mmdbtype.Int32:
 			return int64(v), nil
@@ -406,7 +404,7 @@ func convertToParquetType(value any, typeHint string) (any, error) {
 			return nil, fmt.Errorf("cannot convert %T to int64", value)
 		}
 
-	case "float64":
+	case config.ColumnTypeFloat64:
 		switch v := value.(type) {
 		case mmdbtype.Float32:
 			return float64(v), nil
@@ -428,13 +426,13 @@ func convertToParquetType(value any, typeHint string) (any, error) {
 			return nil, fmt.Errorf("cannot convert %T to float64", value)
 		}
 
-	case "bool":
+	case config.ColumnTypeBool:
 		if v, ok := value.(mmdbtype.Bool); ok {
 			return bool(v), nil
 		}
 		return nil, fmt.Errorf("cannot convert %T to bool", value)
 
-	case "binary":
+	case config.ColumnTypeBinary:
 		if v, ok := value.(mmdbtype.Bytes); ok {
 			return []byte(v), nil
 		}
@@ -448,15 +446,15 @@ func convertToParquetType(value any, typeHint string) (any, error) {
 // getCompressionCodec returns the compression codec for the given name.
 func getCompressionCodec(name string) (compress.Codec, error) {
 	switch name {
-	case "none":
+	case config.ParquetCompressionNone:
 		return &parquet.Uncompressed, nil
-	case "snappy":
+	case config.ParquetCompressionSnappy:
 		return &parquet.Snappy, nil
-	case "gzip":
+	case config.ParquetCompressionGzip:
 		return &parquet.Gzip, nil
-	case "lz4":
+	case config.ParquetCompressionLz4:
 		return &parquet.Lz4Raw, nil
-	case "zstd":
+	case config.ParquetCompressionZstd:
 		return &parquet.Zstd, nil
 	default:
 		return nil, fmt.Errorf("unknown compression codec: %s", name)
@@ -468,7 +466,7 @@ func getCompressionCodec(name string) (compress.Codec, error) {
 // this sort order in the Parquet metadata to help query engines optimize lookups.
 func determineSortingColumns(cfg *config.Config) parquet.WriterOption {
 	for _, col := range cfg.Network.Columns {
-		if col.Type == NetworkColumnStartInt {
+		if col.Type == config.NetworkColumnTypeStartInt {
 			return parquet.SortingWriterConfig(
 				parquet.SortingColumns(parquet.Ascending(string(col.Name))),
 			)

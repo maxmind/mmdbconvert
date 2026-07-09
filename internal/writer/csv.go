@@ -49,7 +49,10 @@ func NewCSVWriter(w io.Writer, cfg *config.Config) *CSVWriter {
 	rangeCapable := true
 	for _, col := range cfg.Network.Columns {
 		switch col.Type {
-		case NetworkColumnStartIP, NetworkColumnEndIP, NetworkColumnStartInt, NetworkColumnEndInt:
+		case config.NetworkColumnTypeStartIP,
+			config.NetworkColumnTypeEndIP,
+			config.NetworkColumnTypeStartInt,
+			config.NetworkColumnTypeEndInt:
 			// supported
 		default:
 			rangeCapable = false
@@ -293,7 +296,7 @@ func (w *CSVWriter) ensureHeader() error {
 }
 
 // generateNetworkColumnValue generates the value for a network column.
-// bucket is only used for NetworkColumnBucket; for other column types it is ignored.
+// bucket is only used for config.NetworkColumnTypeBucket; for other column types it is ignored.
 func (w *CSVWriter) generateNetworkColumnValue(
 	prefix netip.Prefix,
 	bucket netip.Prefix,
@@ -302,30 +305,30 @@ func (w *CSVWriter) generateNetworkColumnValue(
 	addr := prefix.Addr()
 
 	switch colType {
-	case NetworkColumnCIDR:
+	case config.NetworkColumnTypeCIDR:
 		return prefix.String(), nil
 
-	case NetworkColumnStartIP:
+	case config.NetworkColumnTypeStartIP:
 		return addr.String(), nil
 
-	case NetworkColumnEndIP:
+	case config.NetworkColumnTypeEndIP:
 		endIP := netipx.PrefixLastIP(prefix)
 		return endIP.String(), nil
 
-	case NetworkColumnStartInt:
+	case config.NetworkColumnTypeStartInt:
 		if addr.Is4() {
 			return strconv.FormatUint(uint64(network.IPv4ToUint32(addr)), 10), nil
 		}
 		return w.formatIPv6AsInt(addr), nil
 
-	case NetworkColumnEndInt:
+	case config.NetworkColumnTypeEndInt:
 		endIP := netipx.PrefixLastIP(prefix)
 		if endIP.Is4() {
 			return strconv.FormatUint(uint64(network.IPv4ToUint32(endIP)), 10), nil
 		}
 		return w.formatIPv6AsInt(endIP), nil
 
-	case NetworkColumnBucket:
+	case config.NetworkColumnTypeBucket:
 		if !bucket.IsValid() {
 			return "", errors.New("invalid bucket but network_bucket column requested")
 		}
@@ -354,16 +357,16 @@ func (w *CSVWriter) generateRangeNetworkValue(
 	colType string,
 ) (string, error) {
 	switch colType {
-	case NetworkColumnStartIP:
+	case config.NetworkColumnTypeStartIP:
 		return start.String(), nil
-	case NetworkColumnEndIP:
+	case config.NetworkColumnTypeEndIP:
 		return end.String(), nil
-	case NetworkColumnStartInt:
+	case config.NetworkColumnTypeStartInt:
 		if start.Is4() {
 			return strconv.FormatUint(uint64(network.IPv4ToUint32(start)), 10), nil
 		}
 		return w.formatIPv6AsInt(start), nil
-	case NetworkColumnEndInt:
+	case config.NetworkColumnTypeEndInt:
 		if end.Is4() {
 			return strconv.FormatUint(uint64(network.IPv4ToUint32(end)), 10), nil
 		}
