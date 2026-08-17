@@ -4,7 +4,7 @@ go 1.25.3
 
 require (
 	github.com/maxmind/mmdbwriter v1.2.0
-	github.com/oschwald/maxminddb-golang/v2 v2.4.1
+	github.com/oschwald/maxminddb-golang/v2 v2.5.0
 	github.com/parquet-go/parquet-go v0.30.1
 	github.com/pelletier/go-toml/v2 v2.4.3
 	github.com/stretchr/testify v1.12.0
@@ -19,7 +19,7 @@ require (
 	github.com/parquet-go/jsonlite v1.2.0 // indirect
 	github.com/pierrec/lz4/v4 v4.1.23 // indirect
 	github.com/twpayne/go-geom v1.6.1 // indirect
-	golang.org/x/sys v0.46.0 // indirect
+	golang.org/x/sys v0.47.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
