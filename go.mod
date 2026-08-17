@@ -7,19 +7,17 @@ require (
 	github.com/oschwald/maxminddb-golang/v2 v2.4.1
 	github.com/parquet-go/parquet-go v0.30.1
 	github.com/pelletier/go-toml/v2 v2.4.3
-	github.com/stretchr/testify v1.11.1
+	github.com/stretchr/testify v1.12.0
 	go4.org/netipx v0.0.0-20231129151722-fdeea329fbba
 )
 
 require (
 	github.com/andybalholm/brotli v1.2.0 // indirect
-	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/klauspost/compress v1.18.2 // indirect
 	github.com/parquet-go/bitpack v1.0.0 // indirect
 	github.com/parquet-go/jsonlite v1.2.0 // indirect
 	github.com/pierrec/lz4/v4 v4.1.23 // indirect
-	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/twpayne/go-geom v1.6.1 // indirect
 	golang.org/x/sys v0.46.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
