@@ -8,7 +8,7 @@ require (
 	github.com/parquet-go/parquet-go v0.32.0
 	github.com/pelletier/go-toml/v2 v2.4.3
 	github.com/stretchr/testify v1.12.1
-	go4.org/netipx v0.0.0-20231129151722-fdeea329fbba
+	go4.org/netipx v0.0.0-20260823151212-3075585bcbeb
 )
 
 require (
