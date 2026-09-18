@@ -9,6 +9,7 @@ require (
 	github.com/pelletier/go-toml/v2 v2.4.3
 	github.com/stretchr/testify v1.12.1
 	go4.org/netipx v0.0.0-20260823151212-3075585bcbeb
+	golang.org/x/term v0.45.0
 )
 
 require (
