@@ -3,6 +3,7 @@ package writer
 import (
 	"bytes"
 	"encoding/csv"
+	"errors"
 	"math/big"
 	"net/netip"
 	"strconv"
@@ -54,6 +55,99 @@ func TestCSVWriter_SingleRow(t *testing.T) {
 
 	expected := "network,country,city\n10.0.0.0/24,US,New York\n"
 	assert.Equal(t, expected, buf.String())
+}
+
+func TestCSVWriter_FlushBeforeRows(t *testing.T) {
+	includeHeader := true
+	disableHeader := false
+	tests := []struct {
+		name          string
+		includeHeader *bool
+		delimiter     string
+		columnName    mmdbtype.String
+		wantHeader    string
+		wantRow       string
+	}{
+		{
+			name:       "default header",
+			columnName: "value",
+			wantHeader: "network,value\n",
+			wantRow:    "10.0.0.0/24,row\n",
+		},
+		{
+			name:          "explicit header",
+			includeHeader: &includeHeader,
+			columnName:    "value",
+			wantHeader:    "network,value\n",
+			wantRow:       "10.0.0.0/24,row\n",
+		},
+		{
+			name:          "disabled header",
+			includeHeader: &disableHeader,
+			columnName:    "value",
+			wantRow:       "10.0.0.0/24,row\n",
+		},
+		{
+			name:       "custom delimiter and quoted header",
+			delimiter:  ";",
+			columnName: "value;name",
+			wantHeader: "network;\"value;name\"\n",
+			wantRow:    "10.0.0.0/24;row\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			buf := &bytes.Buffer{}
+			cfg := &config.Config{
+				Output: config.OutputConfig{
+					CSV: config.CSVConfig{
+						IncludeHeader: tt.includeHeader,
+						Delimiter:     tt.delimiter,
+					},
+				},
+				Network: config.NetworkConfig{
+					Columns: []config.NetworkColumn{{Name: "network", Type: "cidr"}},
+				},
+				Columns: []config.Column{{Name: tt.columnName}},
+			}
+			writer := NewCSVWriter(buf, cfg)
+
+			require.NoError(t, writer.Flush())
+			assert.Equal(t, tt.wantHeader, buf.String())
+			require.NoError(t, writer.Flush())
+			assert.Equal(t, tt.wantHeader, buf.String())
+
+			require.NoError(t, writer.WriteRow(
+				netip.MustParsePrefix("10.0.0.0/24"),
+				[]mmdbtype.DataType{mmdbtype.String("row")},
+			))
+			require.NoError(t, writer.Flush())
+			assert.Equal(t, tt.wantHeader+tt.wantRow, buf.String())
+		})
+	}
+}
+
+func TestCSVWriter_FlushWithoutRowsWriteError(t *testing.T) {
+	writeErr := errors.New("output unavailable")
+	for _, name := range []string{"value", strings.Repeat("v", 8192)} {
+		cfg := &config.Config{
+			Network: config.NetworkConfig{
+				Columns: []config.NetworkColumn{{Name: "network", Type: "cidr"}},
+			},
+			Columns: []config.Column{{Name: mmdbtype.String(name)}},
+		}
+		writer := NewCSVWriter(csvErrorWriter{err: writeErr}, cfg)
+		require.ErrorIs(t, writer.Flush(), writeErr)
+	}
+}
+
+type csvErrorWriter struct {
+	err error
+}
+
+func (w csvErrorWriter) Write([]byte) (int, error) {
+	return 0, w.err
 }
 
 func TestCSVWriter_MultipleRows(t *testing.T) {
@@ -220,6 +314,9 @@ func TestCSVWriter_WriteRange(t *testing.T) {
 	writer := NewCSVWriter(buf, cfg)
 	start := netip.MustParseAddr("1.0.1.0")
 	end := netip.MustParseAddr("1.0.3.255")
+
+	require.NoError(t, writer.Flush())
+	assert.Equal(t, "start_ip,end_ip,country\n", buf.String())
 
 	// Data in column order: country
 	err := writer.WriteRange(start, end, []mmdbtype.DataType{
