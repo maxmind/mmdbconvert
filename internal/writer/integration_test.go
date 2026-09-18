@@ -2,9 +2,12 @@ package writer
 
 import (
 	"bytes"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/maxmind/mmdbwriter/v2/mmdbtype"
+	"github.com/oschwald/maxminddb-golang/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -17,6 +20,68 @@ const (
 	testDataDir = "../../testdata/MaxMind-DB/test-data"
 	cityTestDB  = testDataDir + "/GeoIP2-City-Test.mmdb"
 )
+
+func TestEndToEnd_MMDBExport(t *testing.T) {
+	for _, tt := range []struct {
+		name         string
+		disableCache bool
+	}{
+		{"with cache", false},
+		{"without cache", true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			readers, err := mmdb.OpenDatabases(map[string]string{"city": cityTestDB})
+			require.NoError(t, err)
+			defer readers.Close()
+			source, ok := readers.Get("city")
+			require.True(t, ok)
+
+			recordSize := 28
+			includeReserved := true
+			cfg := &config.Config{
+				DisableCache: tt.disableCache,
+				Output: config.OutputConfig{
+					Format: config.OutputFormatMMDB,
+					MMDB: config.MMDBConfig{
+						DatabaseType:            source.Metadata().DatabaseType,
+						RecordSize:              &recordSize,
+						IncludeReservedNetworks: &includeReserved,
+					},
+				},
+				Columns: []config.Column{
+					{
+						Name:       "record",
+						Database:   "city",
+						Path:       config.Path{},
+						OutputPath: &config.Path{},
+					},
+				},
+			}
+			path := filepath.Join(t.TempDir(), "copy.mmdb")
+			writer, err := NewMMDBWriter(path, cfg, int(source.Metadata().IPVersion))
+			require.NoError(t, err)
+			m, err := merger.NewMerger(readers, cfg, writer)
+			require.NoError(t, err)
+			require.NoError(t, m.Merge())
+			require.NoError(t, writer.Flush())
+
+			output, err := maxminddb.Open(path)
+			require.NoError(t, err)
+			defer output.Close()
+
+			count := 0
+			for result := range source.Networks() {
+				require.NoError(t, result.Err())
+				var expected, actual mmdbtype.Unmarshaler
+				require.NoError(t, result.Decode(&expected))
+				require.NoError(t, output.Lookup(result.Prefix().Addr()).Decode(&actual))
+				assert.Equal(t, expected.Result(), actual.Result(), "network %s", result.Prefix())
+				count++
+			}
+			assert.Positive(t, count)
+		})
+	}
+}
 
 // TestEndToEnd_CSVExport tests the complete flow from MMDB to CSV output.
 func TestEndToEnd_CSVExport(t *testing.T) {

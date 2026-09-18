@@ -8,7 +8,7 @@ import (
 	"os"
 	"slices"
 
-	"github.com/maxmind/mmdbwriter/mmdbtype"
+	"github.com/maxmind/mmdbwriter/v2/mmdbtype"
 	"github.com/pelletier/go-toml/v2"
 )
 

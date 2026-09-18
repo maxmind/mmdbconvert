@@ -7,7 +7,7 @@ import (
 	"math/big"
 	"net/netip"
 
-	"github.com/maxmind/mmdbwriter/mmdbtype"
+	"github.com/maxmind/mmdbwriter/v2/mmdbtype"
 	"github.com/parquet-go/parquet-go"
 	"github.com/parquet-go/parquet-go/compress"
 	"go4.org/netipx"

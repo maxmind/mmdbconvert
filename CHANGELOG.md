@@ -10,6 +10,7 @@ and this project adheres to
 
 ### Changed
 
+- Updated to mmdbwriter/v2 for faster MMDB output with lower memory usage.
 - Go 1.27 or later is now required to build from source.
 
 ## [0.2.1] - 2026-05-01
