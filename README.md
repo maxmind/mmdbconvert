@@ -5,7 +5,7 @@ Parquet, or MMDB format.
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/license/Apache-2.0)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/license/MIT)
-[![Go Version](https://img.shields.io/badge/Go-1.25%2B-00ADD8?logo=go)](https://go.dev/)
+[![Go Version](https://img.shields.io/badge/Go-1.27%2B-00ADD8?logo=go)](https://go.dev/)
 
 ## Features
 
@@ -581,7 +581,7 @@ This ensures accurate IP lookups with no ambiguity.
 
 ## Requirements
 
-- Go 1.25 or later
+- Go 1.27 or later
 - MaxMind MMDB database files (GeoIP, GeoLite, etc.)
 
 ## License

@@ -205,7 +205,7 @@ func applyDefaults(config *Config) {
 
 	// Output defaults
 	if config.Output.IncludeEmptyRows == nil {
-		config.Output.IncludeEmptyRows = boolPtr(false)
+		config.Output.IncludeEmptyRows = new(false)
 	}
 
 	// CSV defaults
@@ -213,7 +213,7 @@ func applyDefaults(config *Config) {
 		config.Output.CSV.Delimiter = ","
 	}
 	if config.Output.CSV.IncludeHeader == nil {
-		config.Output.CSV.IncludeHeader = boolPtr(true)
+		config.Output.CSV.IncludeHeader = new(true)
 	}
 	if config.Output.CSV.IPv4BucketSize == 0 {
 		config.Output.CSV.IPv4BucketSize = 16
@@ -245,10 +245,10 @@ func applyDefaults(config *Config) {
 	// MMDB defaults
 	if config.Output.Format == OutputFormatMMDB {
 		if config.Output.MMDB.RecordSize == nil {
-			config.Output.MMDB.RecordSize = intPtr(28)
+			config.Output.MMDB.RecordSize = new(28)
 		}
 		if config.Output.MMDB.IncludeReservedNetworks == nil {
-			config.Output.MMDB.IncludeReservedNetworks = boolPtr(false)
+			config.Output.MMDB.IncludeReservedNetworks = new(false)
 		}
 		// Auto-populate languages from description keys if not specified
 		if len(config.Output.MMDB.Languages) == 0 {
@@ -279,14 +279,6 @@ func applyDefaults(config *Config) {
 			}
 		}
 	}
-}
-
-func boolPtr(v bool) *bool {
-	return &v
-}
-
-func intPtr(v int) *int {
-	return &v
 }
 
 // validate performs comprehensive validation of the configuration.

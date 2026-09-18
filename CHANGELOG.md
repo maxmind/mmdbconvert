@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- Go 1.27 or later is now required to build from source.
+
 ## [0.2.1] - 2026-05-01
 
 ### Fixed
@@ -75,6 +81,7 @@ and this project adheres to
 - Multi-database merge validation
 - Performance testing (< 10ms for small databases, 7MB memory)
 
+[Unreleased]: https://github.com/maxmind/mmdbconvert/compare/v0.2.1...HEAD
 [0.2.1]: https://github.com/maxmind/mmdbconvert/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/maxmind/mmdbconvert/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/maxmind/mmdbconvert/releases/tag/v0.1.0
