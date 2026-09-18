@@ -1,13 +1,18 @@
 package mmdbconvert
 
 import (
+	"fmt"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/maxmind/mmdbwriter"
+	"github.com/maxmind/mmdbwriter/mmdbtype"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go4.org/netipx"
 
 	"github.com/maxmind/mmdbconvert/internal/config"
 	"github.com/maxmind/mmdbconvert/internal/mmdb"
@@ -223,6 +228,125 @@ path = ["country", "iso_code"]
 	info, err = os.Stat(ipv6File)
 	require.NoError(t, err)
 	assert.Positive(t, info.Size())
+}
+
+func TestRun_CSVEmptyOutput(t *testing.T) {
+	const header = "network,value\n"
+	tests := []struct {
+		name      string
+		ipVersion int
+		networks  []string
+		field     string
+		wantIPv4  string
+		wantIPv6  string
+	}{
+		{
+			name:      "IPv4 database",
+			ipVersion: 4,
+			networks:  []string{"1.2.3.0/24"},
+			field:     "value",
+			wantIPv4:  "1.2.3.0/24,record\n",
+		},
+		{
+			name:      "IPv6 database with only IPv4 records",
+			ipVersion: 6,
+			networks:  []string{"1.2.3.0/24"},
+			field:     "value",
+			wantIPv4:  "1.2.3.0/24,record\n",
+		},
+		{
+			name:      "IPv6 records only",
+			ipVersion: 6,
+			networks:  []string{"2001:db8::/32"},
+			field:     "value",
+			wantIPv6:  "2001:db8::/32,record\n",
+		},
+		{
+			name:      "empty database",
+			ipVersion: 6,
+			field:     "value",
+		},
+		{
+			name:      "missing field",
+			ipVersion: 6,
+			networks:  []string{"1.2.3.0/24", "2001:db8::/32"},
+			field:     "missing",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			databasePath := createCSVTestDatabase(t, tt.ipVersion, tt.networks)
+			for _, mode := range []string{"split", "combined"} {
+				t.Run(mode, func(t *testing.T) {
+					tmpDir := t.TempDir()
+					outputPaths := fmt.Sprintf(
+						"file = %q",
+						tomlPath(filepath.Join(tmpDir, "output.csv")),
+					)
+					wantFiles := map[string]string{"output.csv": header + tt.wantIPv4 + tt.wantIPv6}
+					if mode == "split" {
+						outputPaths = fmt.Sprintf("ipv4_file = %q\nipv6_file = %q",
+							tomlPath(filepath.Join(tmpDir, "ipv4.csv")),
+							tomlPath(filepath.Join(tmpDir, "ipv6.csv")),
+						)
+						wantFiles = map[string]string{
+							"ipv4.csv": header + tt.wantIPv4,
+							"ipv6.csv": header + tt.wantIPv6,
+						}
+					}
+					configContent := fmt.Sprintf(`
+[output]
+format = "csv"
+%s
+
+[[databases]]
+name = "test"
+path = %q
+
+[[columns]]
+name = "value"
+database = "test"
+path = [%q]
+`, outputPaths, tomlPath(databasePath), tt.field)
+					configFile := filepath.Join(tmpDir, "config.toml")
+					require.NoError(t, os.WriteFile(configFile, []byte(configContent), 0o600))
+					require.NoError(t, Run(Options{ConfigPath: configFile}))
+
+					for name, want := range wantFiles {
+						content, err := os.ReadFile(filepath.Clean(filepath.Join(tmpDir, name)))
+						require.NoError(t, err)
+						assert.Equal(t, want, string(content), name)
+					}
+				})
+			}
+		})
+	}
+}
+
+func createCSVTestDatabase(t *testing.T, ipVersion int, networks []string) string {
+	t.Helper()
+
+	tree, err := mmdbwriter.New(mmdbwriter.Options{
+		DatabaseType:            "test",
+		IPVersion:               ipVersion,
+		IncludeReservedNetworks: true,
+		DisableIPv4Aliasing:     true,
+	})
+	require.NoError(t, err)
+	for _, network := range networks {
+		prefix := netipx.PrefixIPNet(netip.MustParsePrefix(network))
+		require.NoError(t, tree.Insert(prefix, mmdbtype.Map{"value": mmdbtype.String("record")}))
+	}
+
+	path := filepath.Join(t.TempDir(), "input.mmdb")
+	file, err := os.Create(filepath.Clean(path))
+	require.NoError(t, err)
+	defer file.Close()
+	_, err = tree.WriteTo(file)
+	require.NoError(t, err)
+	require.NoError(t, file.Close())
+	return path
 }
 
 // Tests for internal validation functions
