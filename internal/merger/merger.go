@@ -13,7 +13,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/maxmind/mmdbwriter/mmdbtype"
+	"github.com/maxmind/mmdbwriter/v2/mmdbtype"
 	"github.com/oschwald/maxminddb-golang/v2"
 
 	"github.com/maxmind/mmdbconvert/internal/config"
