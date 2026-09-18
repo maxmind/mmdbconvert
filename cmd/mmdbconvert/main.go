@@ -182,5 +182,6 @@ MORE INFORMATION:
     Documentation: https://github.com/maxmind/mmdbconvert
     Report issues: https://github.com/maxmind/mmdbconvert/issues
 
-`)
+`,
+	)
 }

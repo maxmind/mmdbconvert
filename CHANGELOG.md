@@ -8,6 +8,10 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Changed
+
+- Go 1.27 or later is now required to build from source.
+
 ### Fixed
 
 - CSV output now includes the configured header when no data rows are emitted,
