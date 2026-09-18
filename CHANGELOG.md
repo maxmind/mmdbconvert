@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Added
+
+- Structured JSON diagnostics when stderr is not a terminal, with text
+  diagnostics at a terminal. The new `--log-format=auto|json|text` flag can
+  override automatic selection. JSON records use `time`, `level`, and `message`
+  fields with additional context, including `error` for failures.
+
+### Changed
+
+- Progress output now goes to stderr alongside errors and uses structured
+  logging in both formats. `--quiet` continues to suppress progress while
+  retaining errors. Explicit help and version output remain plain text.
+
 ## [0.2.1] - 2026-05-01
 
 ### Fixed
