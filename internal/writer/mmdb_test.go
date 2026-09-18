@@ -1,14 +1,131 @@
 package writer
 
 import (
+	"net/netip"
+	"path/filepath"
 	"testing"
 
-	"github.com/maxmind/mmdbwriter/mmdbtype"
+	"github.com/maxmind/mmdbwriter/v2/mmdbtype"
+	"github.com/oschwald/maxminddb-golang/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/maxmind/mmdbconvert/internal/config"
 )
+
+func TestMMDBWriter_RoundTrip(t *testing.T) {
+	tests := []struct {
+		name      string
+		ipVersion int
+		prefix    string
+		start     string
+		end       string
+	}{
+		{"IPv4", 4, "1.2.3.0/24", "1.2.4.1", "1.2.5.254"},
+		{"IPv4 in IPv6", 6, "1.2.3.0/24", "1.2.4.1", "1.2.5.254"},
+		{"IPv6", 6, "200f::/120", "200f::101", "200f::2fe"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			recordSize := 28
+			includeReserved := false
+			cfg := &config.Config{
+				Output: config.OutputConfig{
+					MMDB: config.MMDBConfig{
+						DatabaseType:            "RoundTrip-Test",
+						Description:             map[string]string{"en": "Round trip test"},
+						Languages:               []string{"en"},
+						RecordSize:              &recordSize,
+						IncludeReservedNetworks: &includeReserved,
+					},
+				},
+				Columns: []config.Column{
+					{Name: "country", OutputPath: &config.Path{"country", "iso_code"}},
+					{Name: "count", OutputPath: &config.Path{"count"}},
+				},
+			}
+			path := filepath.Join(t.TempDir(), "output.mmdb")
+			writer, err := NewMMDBWriter(path, cfg, tt.ipVersion)
+			require.NoError(t, err)
+
+			prefix := netip.MustParsePrefix(tt.prefix)
+			start := netip.MustParseAddr(tt.start)
+			end := netip.MustParseAddr(tt.end)
+			require.NoError(t, writer.WriteRow(prefix, []mmdbtype.DataType{
+				mmdbtype.String("US"), mmdbtype.Uint32(42),
+			}))
+			require.NoError(t, writer.WriteRange(start, end, []mmdbtype.DataType{
+				mmdbtype.String("CA"), mmdbtype.Uint32(24),
+			}))
+			require.NoError(t, writer.Flush())
+
+			reader, err := maxminddb.Open(path)
+			require.NoError(t, err)
+			defer reader.Close()
+			assert.EqualValues(t, tt.ipVersion, reader.Metadata.IPVersion)
+			assert.EqualValues(t, recordSize, reader.Metadata.RecordSize)
+			assert.Equal(t, cfg.Output.MMDB.DatabaseType, reader.Metadata.DatabaseType)
+			assert.Equal(t, cfg.Output.MMDB.Description, reader.Metadata.Description)
+			assert.Equal(t, cfg.Output.MMDB.Languages, reader.Metadata.Languages)
+
+			rowData := mmdbtype.Map{
+				"country": mmdbtype.Map{"iso_code": mmdbtype.String("US")},
+				"count":   mmdbtype.Uint32(42),
+			}
+			rangeData := mmdbtype.Map{
+				"country": mmdbtype.Map{"iso_code": mmdbtype.String("CA")},
+				"count":   mmdbtype.Uint32(24),
+			}
+			for ip := prefix.Addr(); prefix.Contains(ip); ip = ip.Next() {
+				var decoded mmdbtype.Unmarshaler
+				require.NoError(t, reader.Lookup(ip).Decode(&decoded))
+				assert.Equal(t, rowData, decoded.Result(), "IP %s", ip)
+			}
+			for ip := start; ip.Compare(end) <= 0; ip = ip.Next() {
+				var decoded mmdbtype.Unmarshaler
+				require.NoError(t, reader.Lookup(ip).Decode(&decoded))
+				assert.Equal(t, rangeData, decoded.Result(), "IP %s", ip)
+			}
+			for _, ip := range []netip.Addr{prefix.Addr().Prev(), start.Prev(), end.Next()} {
+				result := reader.Lookup(ip)
+				require.NoError(t, result.Err())
+				assert.False(t, result.Found(), "IP %s should not have data", ip)
+			}
+		})
+	}
+}
+
+func TestMMDBWriter_InvalidNetworks(t *testing.T) {
+	recordSize := 28
+	includeReserved := true
+	cfg := &config.Config{
+		Output: config.OutputConfig{
+			MMDB: config.MMDBConfig{
+				RecordSize:              &recordSize,
+				IncludeReservedNetworks: &includeReserved,
+			},
+		},
+		Columns: []config.Column{{Name: "value", OutputPath: &config.Path{"value"}}},
+	}
+	writer, err := NewMMDBWriter(filepath.Join(t.TempDir(), "output.mmdb"), cfg, 4)
+	require.NoError(t, err)
+	data := []mmdbtype.DataType{mmdbtype.String("test")}
+
+	for _, prefix := range []netip.Prefix{{}, netip.MustParsePrefix("200f::/120")} {
+		err = writer.WriteRow(prefix, data)
+		require.ErrorContains(t, err, "inserting ")
+	}
+	for _, ips := range [][2]netip.Addr{
+		{{}, netip.MustParseAddr("1.2.3.4")},
+		{netip.MustParseAddr("1.2.3.4"), {}},
+		{netip.MustParseAddr("1.2.3.5"), netip.MustParseAddr("1.2.3.4")},
+		{netip.MustParseAddr("1.2.3.4"), netip.MustParseAddr("200f::1")},
+		{netip.MustParseAddr("200f::1"), netip.MustParseAddr("200f::2")},
+	} {
+		err = writer.WriteRange(ips[0], ips[1], data)
+		require.ErrorContains(t, err, "inserting range ")
+	}
+}
 
 func TestMergeNestedValue_EmptyPath(t *testing.T) {
 	tests := []struct {

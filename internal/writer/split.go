@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net/netip"
 
-	"github.com/maxmind/mmdbwriter/mmdbtype"
+	"github.com/maxmind/mmdbwriter/v2/mmdbtype"
 	"go4.org/netipx"
 )
 
