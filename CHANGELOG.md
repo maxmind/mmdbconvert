@@ -8,10 +8,20 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Added
+
+- Structured JSON diagnostics when stderr is not a terminal, with text
+  diagnostics at a terminal. The new `--log-format=auto|json|text` flag can
+  override automatic selection. JSON records use `time`, `level`, and `message`
+  fields with additional context, including `error` for failures.
+
 ### Changed
 
 - Updated to mmdbwriter/v2 for faster MMDB output with lower memory usage.
 - Go 1.27 or later is now required to build from source.
+- Progress output now goes to stderr alongside errors and uses structured
+  logging in both formats. `--quiet` continues to suppress progress while
+  retaining errors. Explicit help and version output remain plain text.
 
 ### Fixed
 
