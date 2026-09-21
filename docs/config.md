@@ -288,6 +288,42 @@ output_path = ["country", "iso_code"]  # Optional: path for MMDB output (default
 - `output_path` - (Optional) Path for nested structure in MMDB output. If not
   specified, defaults to a flat structure using `[name]` as the path. Only
   relevant for MMDB output format.
+- `format` - (Optional) CSV value formatting, described below. Rejected for
+  Parquet and MMDB output.
+
+#### CSV Column Formats
+
+Set `format` on an individual column to control its text representation. Set
+either `precision` or both `true` and `false`. Do not combine `precision` with
+`true` or `false`.
+
+```toml
+[[columns]]
+name = "latitude"
+database = "city"
+path = ["location", "latitude"]
+format = { precision = 4 }
+
+[[columns]]
+name = "is_anycast"
+database = "city"
+path = ["traits", "is_anycast"]
+format = { true = "1", false = "" }
+```
+
+- `precision` sets the number of decimal places for floating-point values, from
+  0 through 1000. With precision 4, `37.751` becomes `37.7510` and `35.68536`
+  rounds to `35.6854`.
+- `true` and `false` set labels for booleans and may be empty strings.
+
+Without `format`, floats use their shortest representation and booleans use
+`1`/`0`. Missing values remain empty, regardless of the format. Formatting does
+not affect row filtering or network merging.
+
+A format applied to the wrong type, including a map or array, stops conversion
+with an error naming the column. Strings and integers are not converted. Invalid
+options, including formats on Parquet or MMDB columns, are rejected when loading
+the configuration.
 
 #### Path Syntax
 

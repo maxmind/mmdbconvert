@@ -166,7 +166,7 @@ func (w *CSVWriter) writeSingleRow(
 
 	for i, col := range w.config.Columns {
 		value := data[i]
-		strValue, err := convertToString(value)
+		strValue, err := formatCSVValue(value, col.Format)
 		if err != nil {
 			return fmt.Errorf("converting column '%s' to string: %w", col.Name, err)
 		}
@@ -251,7 +251,7 @@ func (w *CSVWriter) WriteRange(start, end netip.Addr, data []mmdbtype.DataType) 
 
 	for i, col := range w.config.Columns {
 		value := data[i] //nolint:gosec // G602: bounds checked above
-		strValue, err := convertToString(value)
+		strValue, err := formatCSVValue(value, col.Format)
 		if err != nil {
 			return fmt.Errorf("converting column '%s' to string: %w", col.Name, err)
 		}

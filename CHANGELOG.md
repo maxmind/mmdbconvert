@@ -14,6 +14,7 @@ and this project adheres to
   diagnostics at a terminal. The new `--log-format=auto|json|text` flag can
   override automatic selection. JSON records use `time`, `level`, and `message`
   fields with additional context, including `error` for failures.
+- Per-column CSV formats for fixed-precision floats and custom boolean labels.
 
 ### Changed
 

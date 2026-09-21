@@ -133,6 +133,7 @@ type Column struct {
 	Path       Path            `toml:"path"`        // Path segments to the field
 	OutputPath *Path           `toml:"output_path"` // Path segments for MMDB output (defaults to [name])
 	Type       string          `toml:"type"`        // Optional type hint: "string", "int64", "float64", "bool", "binary" (Parquet only)
+	Format     *ColumnFormat   `toml:"format"`      // Optional CSV value formatting
 }
 
 // Path represents the decoded path segments for MMDB lookup.
@@ -186,6 +187,15 @@ func LoadConfig(path string) (*Config, error) {
 	var config Config
 	if err := toml.Unmarshal(data, &config); err != nil {
 		return nil, fmt.Errorf("parsing TOML: %w", err)
+	}
+	// Check names first so format errors can identify their columns.
+	for _, col := range config.Columns {
+		if col.Name == "" {
+			return nil, errors.New("invalid configuration: column name is required")
+		}
+	}
+	if err := validateFormatKeys(data); err != nil {
+		return nil, fmt.Errorf("parsing column formats: %w", err)
 	}
 
 	// Apply defaults
@@ -431,8 +441,8 @@ func validate(config *Config) error {
 	}
 	dataColNames := map[mmdbtype.String]bool{}
 	for _, col := range config.Columns {
-		if col.Name == "" {
-			return errors.New("column name is required")
+		if err := col.Format.validate(config.Output.Format); err != nil {
+			return fmt.Errorf("column '%s': %w", col.Name, err)
 		}
 		if col.Database == "" {
 			return fmt.Errorf("column database is required for column '%s'", col.Name)
