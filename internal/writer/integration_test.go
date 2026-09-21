@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"iter"
 	"net/netip"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -60,15 +59,15 @@ func TestEndToEnd_MMDBExport(t *testing.T) {
 					},
 				},
 			}
-			path := filepath.Join(t.TempDir(), "copy.mmdb")
-			writer, err := NewMMDBWriter(path, cfg, int(source.Metadata().IPVersion))
+			var buf bytes.Buffer
+			writer, err := NewMMDBWriter(&buf, cfg, int(source.Metadata().IPVersion))
 			require.NoError(t, err)
 			m, err := merger.NewMerger(readers, cfg, writer)
 			require.NoError(t, err)
 			require.NoError(t, m.Merge())
 			require.NoError(t, writer.Flush())
 
-			output, err := maxminddb.Open(path)
+			output, err := maxminddb.OpenBytes(buf.Bytes())
 			require.NoError(t, err)
 			defer output.Close()
 

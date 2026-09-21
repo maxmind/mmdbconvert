@@ -64,6 +64,26 @@ include_empty_rows = false  # Include rows with no MMDB data (default: false)
   associated data. Network columns (CIDR, start_ip, etc.) are always present and
   don't affect this filtering.
 
+#### Output Publication
+
+mmdbconvert writes temporary files in the destination directory and replaces the
+outputs only after conversion and flushing succeed. Errors at these stages leave
+existing files unchanged. The directory must already exist and be writable.
+
+Output paths must be regular files or new files. Symlinks and special files,
+such as `/dev/stdout`, are not supported.
+
+On Unix, each file is replaced atomically: readers see either the previous file
+or the complete new file. Windows does not guarantee atomic replacement.
+
+Replacement creates a new file, so ownership, ACLs, and extended attributes are
+not preserved; other hard links keep the old contents. On Unix, replacement
+preserves the existing file's read, write, and execute permissions.
+
+Split IPv4/IPv6 files are replaced separately, so a failure can leave only one
+updated. Use a fresh output directory for each build if both files must be
+published together. Abrupt termination can leave temporary files behind.
+
 #### CSV Options
 
 When `format = "csv"`, you can specify CSV-specific options:

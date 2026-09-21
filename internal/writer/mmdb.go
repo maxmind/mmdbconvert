@@ -2,9 +2,9 @@ package writer
 
 import (
 	"fmt"
+	"io"
 	"maps"
 	"net/netip"
-	"os"
 
 	"github.com/maxmind/mmdbwriter/v2"
 	"github.com/maxmind/mmdbwriter/v2/inserter"
@@ -15,13 +15,13 @@ import (
 
 // MMDBWriter writes merged MMDB data to MMDB format.
 type MMDBWriter struct {
-	tree     *mmdbwriter.Tree
-	config   *config.Config
-	filePath string
+	tree   *mmdbwriter.Tree
+	config *config.Config
+	writer io.Writer
 }
 
 // NewMMDBWriter creates a new MMDB writer.
-func NewMMDBWriter(outputPath string, cfg *config.Config, ipVersion int) (*MMDBWriter, error) {
+func NewMMDBWriter(output io.Writer, cfg *config.Config, ipVersion int) (*MMDBWriter, error) {
 	if ipVersion != 4 && ipVersion != 6 {
 		return nil, fmt.Errorf("invalid IP version: %d", ipVersion)
 	}
@@ -41,9 +41,9 @@ func NewMMDBWriter(outputPath string, cfg *config.Config, ipVersion int) (*MMDBW
 	}
 
 	return &MMDBWriter{
-		tree:     tree,
-		config:   cfg,
-		filePath: outputPath,
+		tree:   tree,
+		config: cfg,
+		writer: output,
 	}, nil
 }
 
@@ -74,19 +74,11 @@ func (w *MMDBWriter) WriteRange(start, end netip.Addr, data []mmdbtype.DataType)
 	return nil
 }
 
-// Flush writes the MMDB tree to disk.
+// Flush serializes the MMDB tree to the supplied writer.
 func (w *MMDBWriter) Flush() error {
-	f, err := os.Create(w.filePath)
-	if err != nil {
-		return fmt.Errorf("creating output file: %w", err)
+	if _, err := w.tree.WriteTo(w.writer); err != nil {
+		return fmt.Errorf("writing MMDB: %w", err)
 	}
-	defer f.Close()
-
-	_, err = w.tree.WriteTo(f)
-	if err != nil {
-		return fmt.Errorf("writing MMDB to file: %w", err)
-	}
-
 	return nil
 }
 
