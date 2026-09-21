@@ -196,8 +196,13 @@ func (w *CSVWriter) flushBatch() error {
 	return nil
 }
 
-// Flush ensures all buffered data is written.
+// Flush ensures all buffered data is written, including the header when enabled,
+// even if no rows have been written.
 func (w *CSVWriter) Flush() error {
+	if err := w.ensureHeader(); err != nil {
+		return err
+	}
+
 	// Flush any remaining batched rows
 	if err := w.flushBatch(); err != nil {
 		return err

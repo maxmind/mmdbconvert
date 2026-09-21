@@ -85,6 +85,11 @@ ipv6_bucket_type = "string"  # IPv6 bucket value type: "string" or "int" (defaul
 | `ipv6_bucket_size` | Prefix length for IPv6 buckets (1-60, when `network_bucket` column used)   | 16       |
 | `ipv6_bucket_type` | IPv6 bucket value type: "string" (hex) or "int" (first 60 bits as integer) | "string" |
 
+When `include_header` is enabled, CSV output includes the configured header even
+if no data rows are written. This includes a split IPv4 or IPv6 file with no
+matching records, or an export where all rows are filtered out. When
+`include_header` is disabled, output with no data rows is a zero-byte file.
+
 #### Parquet Options
 
 When `format = "parquet"`, you can specify Parquet-specific options:
