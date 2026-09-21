@@ -1,0 +1,64 @@
+# Run from the repository root after creating build/geoip-csv.
+[output]
+format = "csv"
+ipv4_file = "build/geoip-csv/GeoIP2-City-Blocks-IPv4.csv"
+ipv6_file = "build/geoip-csv/GeoIP2-City-Blocks-IPv6.csv"
+
+[[databases]]
+name = "city"
+path = "testdata/geoip-csv/GeoIP2-City-Test.mmdb"
+
+[[columns]]
+name = "geoname_id"
+database = "city"
+path = ["city", "geoname_id"]
+
+[[columns]]
+name = "registered_country_geoname_id"
+database = "city"
+path = ["registered_country", "geoname_id"]
+
+[[columns]]
+name = "represented_country_geoname_id"
+database = "city"
+path = ["represented_country", "geoname_id"]
+
+[[columns]]
+name = "is_anonymous_proxy"
+database = "city"
+path = ["traits", "is_anonymous_proxy"]
+format = { true = "1", false = "0" }
+
+[[columns]]
+name = "is_satellite_provider"
+database = "city"
+path = ["traits", "is_satellite_provider"]
+format = { true = "1", false = "0" }
+
+[[columns]]
+name = "postal_code"
+database = "city"
+path = ["postal", "code"]
+
+[[columns]]
+name = "latitude"
+database = "city"
+path = ["location", "latitude"]
+format = { precision = 4 }
+
+[[columns]]
+name = "longitude"
+database = "city"
+path = ["location", "longitude"]
+format = { precision = 4 }
+
+[[columns]]
+name = "accuracy_radius"
+database = "city"
+path = ["location", "accuracy_radius"]
+
+[[columns]]
+name = "is_anycast"
+database = "city"
+path = ["traits", "is_anycast"]
+format = { true = "1", false = "" }
