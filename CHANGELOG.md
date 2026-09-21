@@ -18,6 +18,7 @@ and this project adheres to
 - CSV output now includes the configured header when no data rows are emitted,
   including when an IP family has no records. This applies when `include_header`
   is enabled (the default).
+- MMDB output now uses the column name when `output_path` is omitted.
 
 ## [0.2.1] - 2026-05-01
 

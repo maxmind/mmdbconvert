@@ -111,7 +111,7 @@ func (w *MMDBWriter) buildNestedData(flatData []mmdbtype.DataType) (mmdbtype.Map
 		// Use output_path if set, otherwise use [name] for flat structure
 		path := col.OutputPath
 		if path == nil {
-			path = &config.Path{col.Name}
+			path = &config.Path{string(col.Name)}
 		}
 
 		var err error

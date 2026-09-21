@@ -41,7 +41,7 @@ func TestMMDBWriter_RoundTrip(t *testing.T) {
 				},
 				Columns: []config.Column{
 					{Name: "country", OutputPath: &config.Path{"country", "iso_code"}},
-					{Name: "count", OutputPath: &config.Path{"count"}},
+					{Name: "count"},
 				},
 			}
 			path := filepath.Join(t.TempDir(), "output.mmdb")
