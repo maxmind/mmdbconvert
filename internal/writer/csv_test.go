@@ -130,15 +130,31 @@ func TestCSVWriter_FlushBeforeRows(t *testing.T) {
 
 func TestCSVWriter_FlushWithoutRowsWriteError(t *testing.T) {
 	writeErr := errors.New("output unavailable")
-	for _, name := range []string{"value", strings.Repeat("v", 8192)} {
-		cfg := &config.Config{
-			Network: config.NetworkConfig{
-				Columns: []config.NetworkColumn{{Name: "network", Type: "cidr"}},
-			},
-			Columns: []config.Column{{Name: mmdbtype.String(name)}},
-		}
-		writer := NewCSVWriter(csvErrorWriter{err: writeErr}, cfg)
-		require.ErrorIs(t, writer.Flush(), writeErr)
+	tests := []struct {
+		name       string
+		columnName string
+	}{
+		{
+			name:       "buffered flush",
+			columnName: "value",
+		},
+		{
+			name: "header write",
+			// Exceed the CSV writer's 4 KiB buffer to fail while writing the header.
+			columnName: strings.Repeat("v", 8192),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &config.Config{
+				Network: config.NetworkConfig{
+					Columns: []config.NetworkColumn{{Name: "network", Type: "cidr"}},
+				},
+				Columns: []config.Column{{Name: mmdbtype.String(tt.columnName)}},
+			}
+			writer := NewCSVWriter(csvErrorWriter{err: writeErr}, cfg)
+			require.ErrorIs(t, writer.Flush(), writeErr)
+		})
 	}
 }
 
