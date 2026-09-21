@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/maxmind/mmdbwriter/v2"
+	"github.com/maxmind/mmdbwriter/v2/inserter"
 	"github.com/maxmind/mmdbwriter/v2/mmdbtype"
 
 	"github.com/maxmind/mmdbconvert/internal/config"
@@ -32,6 +33,8 @@ func NewMMDBWriter(outputPath string, cfg *config.Config, ipVersion int) (*MMDBW
 		RecordSize:              *cfg.Output.MMDB.RecordSize,
 		IPVersion:               ipVersion,
 		IncludeReservedNetworks: *cfg.Output.MMDB.IncludeReservedNetworks,
+		// Avoid caching the fresh map built for each row by object identity.
+		Inserter: inserter.Replace,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("creating MMDB tree: %w", err)
