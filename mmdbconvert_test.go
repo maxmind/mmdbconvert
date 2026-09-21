@@ -262,6 +262,14 @@ func TestRun_CSVEmptyOutput(t *testing.T) {
 			wantIPv6:  "2001:db8::/32,record\n",
 		},
 		{
+			name:      "IPv4 and IPv6 records",
+			ipVersion: 6,
+			networks:  []string{"1.2.3.0/24", "2001:db8::/32"},
+			field:     "value",
+			wantIPv4:  "1.2.3.0/24,record\n",
+			wantIPv6:  "2001:db8::/32,record\n",
+		},
+		{
 			name:      "empty database",
 			ipVersion: 6,
 			field:     "value",
