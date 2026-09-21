@@ -231,14 +231,14 @@ path = ["country", "iso_code"]
 }
 
 func TestRun_CSVEmptyOutput(t *testing.T) {
-	const header = "network,value\n"
 	tests := []struct {
-		name      string
-		ipVersion int
-		networks  []string
-		field     string
-		wantIPv4  string
-		wantIPv6  string
+		name          string
+		ipVersion     int
+		networks      []string
+		field         string
+		disableHeader bool
+		wantIPv4      string
+		wantIPv6      string
 	}{
 		{
 			name:      "IPv4 database",
@@ -272,11 +272,30 @@ func TestRun_CSVEmptyOutput(t *testing.T) {
 			networks:  []string{"1.2.3.0/24", "2001:db8::/32"},
 			field:     "missing",
 		},
+		{
+			name:          "empty database without header",
+			ipVersion:     6,
+			field:         "value",
+			disableHeader: true,
+		},
+		{
+			name:          "missing field without header",
+			ipVersion:     6,
+			networks:      []string{"1.2.3.0/24", "2001:db8::/32"},
+			field:         "missing",
+			disableHeader: true,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			databasePath := createCSVTestDatabase(t, tt.ipVersion, tt.networks)
+			header := "network,value\n"
+			csvConfig := ""
+			if tt.disableHeader {
+				header = ""
+				csvConfig = "[output.csv]\ninclude_header = false"
+			}
 			for _, mode := range []string{"split", "combined"} {
 				t.Run(mode, func(t *testing.T) {
 					tmpDir := t.TempDir()
@@ -300,6 +319,8 @@ func TestRun_CSVEmptyOutput(t *testing.T) {
 format = "csv"
 %s
 
+%s
+
 [[databases]]
 name = "test"
 path = %q
@@ -308,7 +329,7 @@ path = %q
 name = "value"
 database = "test"
 path = [%q]
-`, outputPaths, tomlPath(databasePath), tt.field)
+`, outputPaths, csvConfig, tomlPath(databasePath), tt.field)
 					configFile := filepath.Join(tmpDir, "config.toml")
 					require.NoError(t, os.WriteFile(configFile, []byte(configContent), 0o600))
 					require.NoError(t, Run(Options{ConfigPath: configFile}))
