@@ -2,6 +2,8 @@ package writer
 
 import (
 	"bytes"
+	"iter"
+	"net/netip"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -10,6 +12,7 @@ import (
 	"github.com/oschwald/maxminddb-golang/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go4.org/netipx"
 
 	"github.com/maxmind/mmdbconvert/internal/config"
 	"github.com/maxmind/mmdbconvert/internal/merger"
@@ -69,18 +72,46 @@ func TestEndToEnd_MMDBExport(t *testing.T) {
 			require.NoError(t, err)
 			defer output.Close()
 
-			count := 0
-			for result := range source.Networks() {
-				require.NoError(t, result.Err())
-				var expected, actual mmdbtype.Unmarshaler
-				require.NoError(t, result.Decode(&expected))
-				require.NoError(t, output.Lookup(result.Prefix().Addr()).Decode(&actual))
-				assert.Equal(t, expected.Result(), actual.Result(), "network %s", result.Prefix())
-				count++
+			expected := collectMMDBRanges(t, source.Networks())
+			actual := collectMMDBRanges(t, output.Networks())
+			require.NotEmpty(t, expected)
+			require.Len(t, actual, len(expected))
+			for i := range expected {
+				require.Equal(t, expected[i], actual[i], "range %d", i)
 			}
-			assert.Positive(t, count)
 		})
 	}
+}
+
+type mmdbRange struct {
+	start netip.Addr
+	end   netip.Addr
+	data  mmdbtype.DataType
+}
+
+// collectMMDBRanges coalesces adjacent equal records so prefix compaction is allowed.
+func collectMMDBRanges(t *testing.T, networks iter.Seq[maxminddb.Result]) []mmdbRange {
+	t.Helper()
+	var ranges []mmdbRange
+	for result := range networks {
+		require.NoError(t, result.Err())
+		var decoded mmdbtype.Unmarshaler
+		require.NoError(t, result.Decode(&decoded))
+		current := mmdbRange{
+			start: result.Prefix().Addr(),
+			end:   netipx.PrefixLastIP(result.Prefix()),
+			data:  decoded.Result(),
+		}
+		if len(ranges) > 0 {
+			previous := &ranges[len(ranges)-1]
+			if previous.end.Next() == current.start && previous.data.Equal(current.data) {
+				previous.end = current.end
+				continue
+			}
+		}
+		ranges = append(ranges, current)
+	}
+	return ranges
 }
 
 // TestEndToEnd_CSVExport tests the complete flow from MMDB to CSV output.
