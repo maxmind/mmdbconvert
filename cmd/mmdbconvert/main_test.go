@@ -130,6 +130,7 @@ func TestRunCLISuccess(t *testing.T) {
 					}
 					records := decodeLogRecords(t, stderr.String())
 					require.NotEmpty(t, records)
+					assert.Equal(t, "Starting mmdbconvert", records[0]["message"])
 					for _, record := range records {
 						assert.Equal(t, "INFO", record["level"])
 						assert.Equal(t, version, record["version"])

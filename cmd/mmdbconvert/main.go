@@ -170,7 +170,7 @@ func runCLI(args []string, stdout, stderr io.Writer, stderrIsTerminal bool) int 
 func run(configPath string, disableCache bool, logger *slog.Logger) error {
 	startTime := time.Now()
 
-	logger.Info("mmdbconvert")
+	logger.Info("Starting mmdbconvert")
 	logger.Info("Loading configuration")
 	logger.Info("Merging databases and writing output")
 
