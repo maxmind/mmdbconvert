@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"errors"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -9,6 +11,14 @@ import (
 )
 
 func TestRunCLIMemoryProfileWriteError(t *testing.T) {
+	info, err := os.Stat("/dev/full")
+	if errors.Is(err, os.ErrNotExist) {
+		t.Skip("/dev/full is unavailable")
+	}
+	require.NoError(t, err)
+	if info.Mode()&os.ModeCharDevice == 0 {
+		t.Skip("/dev/full is not a character device")
+	}
 	configPath, _ := writeTestConfig(t, testDatabasePath(t))
 	var stdout, stderr bytes.Buffer
 	args := []string{"--quiet", "--memprofile", "/dev/full", configPath}
