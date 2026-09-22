@@ -400,7 +400,7 @@ When making changes:
 
 ### Build fails
 
-- Ensure Go 1.25+ is installed
+- Ensure Go 1.27+ is installed
 - Run `go mod tidy` to sync dependencies
 
 ### Tests fail

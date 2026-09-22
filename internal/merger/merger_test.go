@@ -5,7 +5,7 @@ import (
 	"net/netip"
 	"testing"
 
-	"github.com/maxmind/mmdbwriter/mmdbtype"
+	"github.com/maxmind/mmdbwriter/v2/mmdbtype"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -19,10 +19,6 @@ const (
 	anonTestDB  = testDataDir + "/GeoIP2-Anonymous-IP-Test.mmdb"
 	ipv4TestDB  = testDataDir + "/MaxMind-DB-test-ipv4-24.mmdb"
 )
-
-func boolPtr(v bool) *bool {
-	return &v
-}
 
 func TestMerger_SingleDatabase(t *testing.T) {
 	// Open test database
@@ -188,7 +184,7 @@ func TestMerger_AdjacentNetworkMerging(t *testing.T) {
 	// Create config
 	cfg := &config.Config{
 		Output: config.OutputConfig{
-			IncludeEmptyRows: boolPtr(true), // Include networks even if they have no data
+			IncludeEmptyRows: new(true), // Include networks even if they have no data
 		},
 		Columns: []config.Column{
 			{

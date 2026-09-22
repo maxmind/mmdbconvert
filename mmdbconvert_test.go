@@ -8,11 +8,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/maxmind/mmdbwriter"
-	"github.com/maxmind/mmdbwriter/mmdbtype"
+	"github.com/maxmind/mmdbwriter/v2"
+	"github.com/maxmind/mmdbwriter/v2/mmdbtype"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go4.org/netipx"
 
 	"github.com/maxmind/mmdbconvert/internal/config"
 	"github.com/maxmind/mmdbconvert/internal/mmdb"
@@ -364,7 +363,7 @@ func createCSVTestDatabase(t *testing.T, ipVersion int, networks []string) strin
 	})
 	require.NoError(t, err)
 	for _, network := range networks {
-		prefix := netipx.PrefixIPNet(netip.MustParsePrefix(network))
+		prefix := netip.MustParsePrefix(network)
 		require.NoError(t, tree.Insert(prefix, mmdbtype.Map{"value": mmdbtype.String("record")}))
 	}
 

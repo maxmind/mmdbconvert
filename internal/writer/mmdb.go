@@ -6,9 +6,9 @@ import (
 	"net/netip"
 	"os"
 
-	"github.com/maxmind/mmdbwriter"
-	"github.com/maxmind/mmdbwriter/mmdbtype"
-	"go4.org/netipx"
+	"github.com/maxmind/mmdbwriter/v2"
+	"github.com/maxmind/mmdbwriter/v2/inserter"
+	"github.com/maxmind/mmdbwriter/v2/mmdbtype"
 
 	"github.com/maxmind/mmdbconvert/internal/config"
 )
@@ -33,6 +33,8 @@ func NewMMDBWriter(outputPath string, cfg *config.Config, ipVersion int) (*MMDBW
 		RecordSize:              *cfg.Output.MMDB.RecordSize,
 		IPVersion:               ipVersion,
 		IncludeReservedNetworks: *cfg.Output.MMDB.IncludeReservedNetworks,
+		// Avoid caching the fresh map built for each row by object identity.
+		Inserter: inserter.Replace,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("creating MMDB tree: %w", err)
@@ -52,8 +54,7 @@ func (w *MMDBWriter) WriteRow(prefix netip.Prefix, data []mmdbtype.DataType) err
 		return fmt.Errorf("building nested data: %w", err)
 	}
 
-	ipnet := netipx.PrefixIPNet(prefix)
-	if err := w.tree.Insert(ipnet, nested); err != nil {
+	if err := w.tree.Insert(prefix, nested); err != nil {
 		return fmt.Errorf("inserting %s: %w", prefix, err)
 	}
 
@@ -67,12 +68,8 @@ func (w *MMDBWriter) WriteRange(start, end netip.Addr, data []mmdbtype.DataType)
 		return fmt.Errorf("building nested data: %w", err)
 	}
 
-	cidrs := netipx.IPRangeFrom(start, end).Prefixes()
-	for _, cidr := range cidrs {
-		ipnet := netipx.PrefixIPNet(cidr)
-		if err := w.tree.Insert(ipnet, nested); err != nil {
-			return fmt.Errorf("inserting %s: %w", cidr, err)
-		}
+	if err := w.tree.InsertRange(start, end, nested); err != nil {
+		return fmt.Errorf("inserting range %s-%s: %w", start, end, err)
 	}
 	return nil
 }
@@ -114,7 +111,7 @@ func (w *MMDBWriter) buildNestedData(flatData []mmdbtype.DataType) (mmdbtype.Map
 		// Use output_path if set, otherwise use [name] for flat structure
 		path := col.OutputPath
 		if path == nil {
-			path = &config.Path{col.Name}
+			path = &config.Path{string(col.Name)}
 		}
 
 		var err error

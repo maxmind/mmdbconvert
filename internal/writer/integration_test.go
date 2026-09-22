@@ -2,11 +2,17 @@ package writer
 
 import (
 	"bytes"
+	"iter"
+	"net/netip"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/maxmind/mmdbwriter/v2/mmdbtype"
+	"github.com/oschwald/maxminddb-golang/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go4.org/netipx"
 
 	"github.com/maxmind/mmdbconvert/internal/config"
 	"github.com/maxmind/mmdbconvert/internal/merger"
@@ -17,6 +23,96 @@ const (
 	testDataDir = "../../testdata/MaxMind-DB/test-data"
 	cityTestDB  = testDataDir + "/GeoIP2-City-Test.mmdb"
 )
+
+func TestEndToEnd_MMDBExport(t *testing.T) {
+	for _, tt := range []struct {
+		name         string
+		disableCache bool
+	}{
+		{"with cache", false},
+		{"without cache", true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			readers, err := mmdb.OpenDatabases(map[string]string{"city": cityTestDB})
+			require.NoError(t, err)
+			defer readers.Close()
+			source, ok := readers.Get("city")
+			require.True(t, ok)
+
+			recordSize := 28
+			includeReserved := true
+			cfg := &config.Config{
+				DisableCache: tt.disableCache,
+				Output: config.OutputConfig{
+					Format: config.OutputFormatMMDB,
+					MMDB: config.MMDBConfig{
+						DatabaseType:            source.Metadata().DatabaseType,
+						RecordSize:              &recordSize,
+						IncludeReservedNetworks: &includeReserved,
+					},
+				},
+				Columns: []config.Column{
+					{
+						Name:       "record",
+						Database:   "city",
+						Path:       config.Path{},
+						OutputPath: &config.Path{},
+					},
+				},
+			}
+			path := filepath.Join(t.TempDir(), "copy.mmdb")
+			writer, err := NewMMDBWriter(path, cfg, int(source.Metadata().IPVersion))
+			require.NoError(t, err)
+			m, err := merger.NewMerger(readers, cfg, writer)
+			require.NoError(t, err)
+			require.NoError(t, m.Merge())
+			require.NoError(t, writer.Flush())
+
+			output, err := maxminddb.Open(path)
+			require.NoError(t, err)
+			defer output.Close()
+
+			expected := collectMMDBRanges(t, source.Networks())
+			actual := collectMMDBRanges(t, output.Networks())
+			require.NotEmpty(t, expected)
+			require.Len(t, actual, len(expected))
+			for i := range expected {
+				require.Equal(t, expected[i], actual[i], "range %d", i)
+			}
+		})
+	}
+}
+
+type mmdbRange struct {
+	start netip.Addr
+	end   netip.Addr
+	data  mmdbtype.DataType
+}
+
+// collectMMDBRanges coalesces adjacent equal records so prefix compaction is allowed.
+func collectMMDBRanges(t *testing.T, networks iter.Seq[maxminddb.Result]) []mmdbRange {
+	t.Helper()
+	var ranges []mmdbRange
+	for result := range networks {
+		require.NoError(t, result.Err())
+		var decoded mmdbtype.Unmarshaler
+		require.NoError(t, result.Decode(&decoded))
+		current := mmdbRange{
+			start: result.Prefix().Addr(),
+			end:   netipx.PrefixLastIP(result.Prefix()),
+			data:  decoded.Result(),
+		}
+		if len(ranges) > 0 {
+			previous := &ranges[len(ranges)-1]
+			if previous.end.Next() == current.start && previous.data.Equal(current.data) {
+				previous.end = current.end
+				continue
+			}
+		}
+		ranges = append(ranges, current)
+	}
+	return ranges
+}
 
 // TestEndToEnd_CSVExport tests the complete flow from MMDB to CSV output.
 func TestEndToEnd_CSVExport(t *testing.T) {
