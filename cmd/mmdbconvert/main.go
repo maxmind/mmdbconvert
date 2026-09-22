@@ -77,7 +77,8 @@ func runCLI(args []string, stdout, stderr io.Writer, stderrIsTerminal bool) int 
 	case logFormatText:
 		jsonLogs = false
 	default:
-		parseErr = fmt.Errorf("invalid log format %q (expected auto, json, or text)", logFormat)
+		parseErr = errors.Join(parseErr,
+			fmt.Errorf("invalid log format %q (expected auto, json, or text)", logFormat))
 	}
 	logger := newLogger(stderr, jsonLogs, quiet)
 	if parseErr != nil {

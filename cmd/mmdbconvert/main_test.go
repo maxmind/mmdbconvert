@@ -58,6 +58,11 @@ func TestRunCLIFormats(t *testing.T) {
 			terminal: true, code: 2,
 		},
 		{
+			name: "later override is not parsed",
+			args: []string{"--log-format=text", "--unknown", "--log-format=json"},
+			code: 2,
+		},
+		{
 			name: "invalid override in pipe",
 			args: []string{"--log-format=text", "--log-format=invalid"},
 			json: true,
@@ -192,6 +197,16 @@ func TestRunCLIArgumentErrors(t *testing.T) {
 			args:    []string{"--log-format=JSON"},
 			errText: "invalid log format",
 		},
+		{
+			name:    "invalid format before unknown flag",
+			args:    []string{"--log-format=xml", "--unknown"},
+			errText: "flag provided but not defined: -unknown\ninvalid log format",
+		},
+		{
+			name:    "invalid format after unknown flag",
+			args:    []string{"--unknown", "--log-format=xml"},
+			errText: "flag provided but not defined: -unknown",
+		},
 	}
 	for _, format := range []string{"json", "text"} {
 		for _, tt := range tests {
@@ -211,7 +226,9 @@ func TestRunCLIArgumentErrors(t *testing.T) {
 				if format == "text" {
 					assert.Contains(t, stderr.String(), "level=ERROR")
 					assert.Contains(t, stderr.String(), message)
-					assert.Contains(t, stderr.String(), tt.errText)
+					for text := range strings.SplitSeq(tt.errText, "\n") {
+						assert.Contains(t, stderr.String(), text)
+					}
 					assert.Contains(t, stderr.String(), "USAGE:")
 					return
 				}
