@@ -407,6 +407,30 @@ func TestRunCLIProfiling(t *testing.T) {
 	}
 }
 
+func TestRunCLIConversionAndMemoryProfileErrors(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "missing.toml")
+	cpuPath := filepath.Join(t.TempDir(), "cpu.prof")
+	memoryPath := t.TempDir()
+	var stdout, stderr bytes.Buffer
+	args := []string{"--quiet", "--cpuprofile", cpuPath, "--memprofile", memoryPath, configPath}
+	assert.Equal(t, 1, runCLI(args, &stdout, &stderr, false))
+	assert.Empty(t, stdout.String())
+	records := decodeLogRecords(t, stderr.String())
+	require.Len(t, records, 2)
+	assert.Equal(t, "Converting databases", records[0]["message"])
+	assert.Contains(t, records[0]["error"], configPath)
+	assert.Equal(t, "Creating memory profile", records[1]["message"])
+	assert.Contains(t, records[1]["error"], memoryPath)
+	for _, record := range records {
+		assert.Equal(t, "ERROR", record["level"])
+		assert.Equal(t, configPath, record["config_path"])
+	}
+	// Both failures must still leave CPU profiling stopped and its file closed.
+	require.NoError(t, os.Remove(cpuPath))
+	require.NoError(t, pprof.StartCPUProfile(io.Discard))
+	pprof.StopCPUProfile()
+}
+
 func TestRunCLICPUProfileAlreadyStarted(t *testing.T) {
 	require.NoError(t, pprof.StartCPUProfile(io.Discard))
 	t.Cleanup(pprof.StopCPUProfile)

@@ -135,6 +135,9 @@ func runCLI(args []string, stdout, stderr io.Writer, stderrIsTerminal bool) int 
 
 	// Run the conversion
 	runErr := run(configPath, disableCache, logger)
+	if runErr != nil {
+		logger.Error("Converting databases", "error", runErr)
+	}
 
 	// Stop CPU profiling and close file before potentially exiting
 	if cpuProfileFile != nil {
@@ -158,9 +161,7 @@ func runCLI(args []string, stdout, stderr io.Writer, stderrIsTerminal bool) int 
 		f.Close()
 	}
 
-	// Check for run errors after profiling is complete
 	if runErr != nil {
-		logger.Error("Converting databases", "error", runErr)
 		return 1
 	}
 	return 0
