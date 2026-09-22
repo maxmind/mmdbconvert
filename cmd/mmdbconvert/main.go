@@ -2,23 +2,38 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
+	"io"
+	"log/slog"
 	"os"
 	"runtime/pprof"
 	"time"
 
+	"golang.org/x/term"
+
 	"github.com/maxmind/mmdbconvert"
 )
 
-const unknownVersion = "unknown"
+const (
+	unknownVersion = "unknown"
+	logFormatAuto  = "auto"
+	logFormatJSON  = "json"
+	logFormatText  = "text"
+)
 
 var version = unknownVersion
 
 func main() {
+	os.Exit(runCLI(os.Args[1:], os.Stdout, os.Stderr, term.IsTerminal(int(os.Stderr.Fd()))))
+}
+
+func runCLI(args []string, stdout, stderr io.Writer, stderrIsTerminal bool) int {
 	// Define command-line flags
 	var (
 		configPath   string
+		logFormat    string
 		quiet        bool
 		showHelp     bool
 		showVer      bool
@@ -27,43 +42,87 @@ func main() {
 		disableCache bool
 	)
 
-	flag.StringVar(&configPath, "config", "", "Path to TOML configuration file")
-	flag.BoolVar(&quiet, "quiet", false, "Suppress progress output")
-	flag.BoolVar(&showHelp, "help", false, "Show usage information")
-	flag.BoolVar(&showVer, "version", false, "Show version information")
-	flag.StringVar(&cpuprofile, "cpuprofile", "", "Write CPU profile to file")
-	flag.StringVar(&memprofile, "memprofile", "", "Write memory profile to file")
-	flag.BoolVar(
+	flags := flag.NewFlagSet("mmdbconvert", flag.ContinueOnError)
+	flags.StringVar(&configPath, "config", "", "Path to TOML configuration file")
+	flags.StringVar(
+		&logFormat,
+		"log-format",
+		logFormatAuto,
+		"Diagnostic format: auto, json, or text",
+	)
+	flags.BoolVar(&quiet, "quiet", false, "Suppress progress output")
+	flags.BoolVar(&showHelp, "help", false, "Show usage information")
+	flags.BoolVar(&showVer, "version", false, "Show version information")
+	flags.StringVar(&cpuprofile, "cpuprofile", "", "Write CPU profile to file")
+	flags.StringVar(&memprofile, "memprofile", "", "Write memory profile to file")
+	flags.BoolVar(
 		&disableCache,
 		"disable-cache",
 		false,
 		"Disable MMDB unmarshaler caching to reduce memory usage (several times slower)",
 	)
 
-	flag.Usage = usage
-	flag.Parse()
+	// Handle parser errors ourselves so usage text cannot leak into JSON logs.
+	flags.SetOutput(io.Discard)
+	parseErr := flags.Parse(args)
+	if errors.Is(parseErr, flag.ErrHelp) || (parseErr == nil && showHelp) {
+		usage(stderr)
+		return 0
+	}
+	format := logFormatText
+	if !stderrIsTerminal {
+		format = logFormatJSON
+	}
+	switch logFormat {
+	case logFormatAuto:
+	case logFormatJSON, logFormatText:
+		format = logFormat
+	default:
+		parseErr = errors.Join(parseErr,
+			fmt.Errorf("invalid log format %q (expected auto, json, or text)", logFormat))
+	}
+	level := slog.LevelInfo
+	if quiet {
+		level = slog.LevelWarn
+	}
+	logger := newLogger(stderr, format, level).With("version", version)
+	if parseErr != nil {
+		logger.Error("Parsing command-line flags", "error", parseErr)
+		if format == logFormatText {
+			usage(stderr)
+		}
+		return 2
+	}
 
 	// Handle version flag
 	if showVer {
-		fmt.Printf("mmdbconvert version %s\n", version)
-		os.Exit(0)
+		if _, err := fmt.Fprintf(stdout, "mmdbconvert version %s\n", version); err != nil {
+			logger.Error("Writing version", "error", err)
+			return 1
+		}
+		return 0
 	}
 
-	// Handle help flag
-	if showHelp {
-		usage()
-		os.Exit(0)
+	if flags.NArg() > 1 || (configPath != "" && flags.NArg() > 0) {
+		logger.Error("Only one config file path may be specified")
+		if format == logFormatText {
+			usage(stderr)
+		}
+		return 2
 	}
 
 	// Get config path from positional argument if not specified with flag
 	if configPath == "" {
-		if flag.NArg() == 0 {
-			fmt.Fprint(os.Stderr, "Error: config file path required\n\n")
-			usage()
-			os.Exit(1)
+		if flags.NArg() == 0 {
+			logger.Error("Config file path required")
+			if format == logFormatText {
+				usage(stderr)
+			}
+			return 2
 		}
-		configPath = flag.Arg(0)
+		configPath = flags.Arg(0)
 	}
+	logger = logger.With("config_path", configPath, "disable_cache", disableCache)
 
 	// Start CPU profiling if requested
 	var cpuProfileFile *os.File
@@ -71,19 +130,22 @@ func main() {
 		// #nosec G304 -- cpuprofile path comes from trusted command-line flag
 		f, err := os.Create(cpuprofile)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error creating CPU profile: %v\n", err)
-			os.Exit(1)
+			logger.Error("Creating CPU profile", "error", err)
+			return 1
 		}
 		cpuProfileFile = f
 		if err := pprof.StartCPUProfile(f); err != nil {
-			fmt.Fprintf(os.Stderr, "Error starting CPU profile: %v\n", err)
+			logger.Error("Starting CPU profile", "error", err)
 			f.Close()
-			os.Exit(1)
+			return 1
 		}
 	}
 
 	// Run the conversion
-	runErr := run(configPath, quiet, disableCache)
+	runErr := run(configPath, disableCache, logger)
+	if runErr != nil {
+		logger.Error("Converting databases", "error", runErr)
+	}
 
 	// Stop CPU profiling and close file before potentially exiting
 	if cpuProfileFile != nil {
@@ -96,36 +158,30 @@ func main() {
 		// #nosec G304 -- memprofile path comes from trusted command-line flag
 		f, err := os.Create(memprofile)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error creating memory profile: %v\n", err)
-			os.Exit(1)
+			logger.Error("Creating memory profile", "error", err)
+			return 1
 		}
 		if err := pprof.WriteHeapProfile(f); err != nil {
 			f.Close()
-			fmt.Fprintf(os.Stderr, "Error writing memory profile: %v\n", err)
-			os.Exit(1)
+			logger.Error("Writing memory profile", "error", err)
+			return 1
 		}
 		f.Close()
 	}
 
-	// Check for run errors after profiling is complete
 	if runErr != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", runErr)
-		os.Exit(1)
+		return 1
 	}
+	return 0
 }
 
 // run performs the main conversion process.
-func run(configPath string, quiet, disableCache bool) error {
+func run(configPath string, disableCache bool, logger *slog.Logger) error {
 	startTime := time.Now()
 
-	if !quiet {
-		fmt.Printf("mmdbconvert v%s\n", version)
-		fmt.Printf("Loading configuration from %s...\n", configPath)
-		fmt.Println("Merging databases and writing output...")
-		if disableCache {
-			fmt.Println("  (unmarshaler caching disabled)")
-		}
-	}
+	logger.Info("Starting mmdbconvert")
+	logger.Info("Loading configuration")
+	logger.Info("Merging databases and writing output")
 
 	err := mmdbconvert.Run(mmdbconvert.Options{
 		ConfigPath:   configPath,
@@ -135,18 +191,18 @@ func run(configPath string, quiet, disableCache bool) error {
 		return err
 	}
 
-	if !quiet {
-		elapsed := time.Since(startTime)
-		fmt.Println()
-		fmt.Printf("✓ Successfully completed in %v\n", elapsed.Round(time.Millisecond))
-	}
+	logger.Info(
+		"Successfully completed",
+		slog.Duration("elapsed", time.Since(startTime).Round(time.Millisecond)),
+	)
 
 	return nil
 }
 
-func usage() {
+func usage(w io.Writer) {
+	//nolint:errcheck // Usage is best effort; a write error means stderr is unavailable.
 	fmt.Fprint(
-		os.Stderr,
+		w,
 		`mmdbconvert - Merge MaxMind MMDB databases and export to CSV, Parquet, or MMDB
 
 USAGE:
@@ -154,13 +210,20 @@ USAGE:
     mmdbconvert --config <config-file> [OPTIONS]
 
 OPTIONS:
-    --config <file>        Path to TOML configuration file
-    --quiet                Suppress progress output
-    --disable-cache        Disable MMDB unmarshaler caching to reduce memory (several times slower)
-    --cpuprofile <file>    Write CPU profile to file
-    --memprofile <file>    Write memory profile to file
-    --help                 Show this help message
-    --version              Show version information
+    --config <file>         Path to TOML configuration file
+    --log-format <format>   Diagnostic format: auto (default), json, or text
+    --quiet                 Suppress progress output; errors remain visible
+    --disable-cache         Disable MMDB unmarshaler caching to reduce memory (several times slower)
+    --cpuprofile <file>     Write CPU profile to file
+    --memprofile <file>     Write memory profile to file
+    --help                  Show this help message
+    --version               Show version information
+
+LOGGING:
+    Progress and errors go to stderr. The auto format selects text when stderr
+    is a terminal and JSON otherwise. JSON records contain time, level, and
+    message fields, plus relevant attributes such as error or elapsed_ms.
+    Explicit help goes to stderr and version output to stdout, both as plain text.
 
 EXAMPLES:
     # Basic usage with config file
@@ -171,6 +234,10 @@ EXAMPLES:
 
     # Suppress progress output
     mmdbconvert --config config.toml --quiet
+
+    # Force a diagnostic format
+    mmdbconvert --log-format=json config.toml
+    mmdbconvert --log-format=text config.toml
 
     # Profile performance
     mmdbconvert --config config.toml --cpuprofile cpu.prof --memprofile mem.prof --quiet

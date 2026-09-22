@@ -180,6 +180,12 @@ mmdbconvert --config config.toml
 # Suppress progress output
 mmdbconvert --config config.toml --quiet
 
+# Force JSON diagnostics, even at a terminal
+mmdbconvert --log-format=json config.toml
+
+# Force text diagnostics, even when redirected
+mmdbconvert --log-format=text config.toml
+
 # Disable unmarshaler caching to reduce memory usage (several times slower)
 mmdbconvert --config config.toml --disable-cache
 
@@ -189,6 +195,26 @@ mmdbconvert --version
 # Show help
 mmdbconvert --help
 ```
+
+Progress and errors are written to stderr. The default `--log-format=auto`
+selects text when stderr is a terminal and JSON when it is redirected to a pipe
+or file. Format selection depends only on stderr, regardless of where stdout
+goes. Use `--log-format=json` or `--log-format=text` to override it.
+
+JSON diagnostics contain one object per line, with `time`, `level`, and
+`message` fields. Additional fields provide context: `version`, `config_path`,
+`disable_cache`, `elapsed_ms`, or `error` (the complete error string). Version,
+configuration path, and cache settings are included on conversion and profiling
+errors even with `--quiet`. The `disable_cache` field is always a boolean,
+whether caching is enabled or disabled. Text diagnostics use a readable
+`key=value` format, with a duration such as `elapsed=2h0m0s` instead of
+`elapsed_ms`.
+
+`--quiet` suppresses progress messages, including startup and completion, but
+keeps errors visible in the selected format. Explicit `--help` output remains
+plain text on stderr, and `--version` remains plain text on stdout. Argument
+errors exit with status 2; runtime failures exit with status 1. Argument errors
+in JSON mode do not append usage text; use `--help` to see usage.
 
 ## Configuration
 
