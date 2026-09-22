@@ -64,7 +64,6 @@ func runCLI(args []string, stdout, stderr io.Writer, stderrIsTerminal bool) int 
 
 	// Handle parser errors ourselves so usage text cannot leak into JSON logs.
 	flags.SetOutput(io.Discard)
-	flags.Usage = func() {}
 	parseErr := flags.Parse(args)
 	jsonLogs := !stderrIsTerminal
 	switch logFormat {
