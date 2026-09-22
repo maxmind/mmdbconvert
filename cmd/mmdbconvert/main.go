@@ -203,8 +203,8 @@ OPTIONS:
     --log-format <format>   Diagnostic format: auto (default), json, or text
     --quiet                 Suppress progress output; errors remain visible
     --disable-cache         Disable MMDB unmarshaler caching to reduce memory (several times slower)
-    --cpuprofile <file>      Write CPU profile to file
-    --memprofile <file>      Write memory profile to file
+    --cpuprofile <file>     Write CPU profile to file
+    --memprofile <file>     Write memory profile to file
     --help                  Show this help message
     --version               Show version information
 
