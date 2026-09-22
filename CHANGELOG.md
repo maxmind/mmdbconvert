@@ -26,6 +26,7 @@ and this project adheres to
 
 ### Fixed
 
+- Extra command-line arguments are now rejected instead of silently ignored.
 - CSV output now includes the configured header when no data rows are emitted,
   including when an IP family has no records. This applies when `include_header`
   is enabled (the default).

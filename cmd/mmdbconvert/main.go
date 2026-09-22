@@ -103,6 +103,14 @@ func runCLI(args []string, stdout, stderr io.Writer, stderrIsTerminal bool) int 
 		return 0
 	}
 
+	if flags.NArg() > 1 || (configPath != "" && flags.NArg() > 0) {
+		logger.Error("Only one config file path may be specified")
+		if format == logFormatText {
+			usage(stderr)
+		}
+		return 2
+	}
+
 	// Get config path from positional argument if not specified with flag
 	if configPath == "" {
 		if flags.NArg() == 0 {

@@ -147,6 +147,7 @@ func TestRunCLISuccess(t *testing.T) {
 }
 
 func TestRunCLIArgumentErrors(t *testing.T) {
+	configPath, outputPath := writeTestConfig(t, testDatabasePath(t))
 	tests := []struct {
 		name    string
 		args    []string
@@ -155,6 +156,21 @@ func TestRunCLIArgumentErrors(t *testing.T) {
 		errText string
 	}{
 		{name: "missing config", code: 2, message: "Config file path required"},
+		{
+			name:    "multiple config paths",
+			args:    []string{configPath, "extra.toml"},
+			message: "Only one config file path may be specified",
+		},
+		{
+			name:    "config flag and positional path",
+			args:    []string{"--config", configPath, "extra.toml"},
+			message: "Only one config file path may be specified",
+		},
+		{
+			name:    "flag after positional path",
+			args:    []string{configPath, "--quiet"},
+			message: "Only one config file path may be specified",
+		},
 		{
 			name:    "unknown flag",
 			args:    []string{"--unknown"},
@@ -228,6 +244,7 @@ func TestRunCLIArgumentErrors(t *testing.T) {
 			})
 		}
 	}
+	assert.NoFileExists(t, outputPath)
 }
 
 func TestRunCLIOperationalErrors(t *testing.T) {
