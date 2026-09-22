@@ -21,7 +21,8 @@ and this project adheres to
 - Go 1.27 or later is now required to build from source.
 - Progress output now goes to stderr alongside errors and uses structured
   logging in both formats. `--quiet` continues to suppress progress while
-  retaining errors. Explicit help and version output remain plain text.
+  retaining errors. Explicit help and version output remain plain text. Missing
+  configuration arguments exit with status 2, like other usage errors.
 
 ### Fixed
 

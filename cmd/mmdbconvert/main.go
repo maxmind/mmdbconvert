@@ -105,7 +105,7 @@ func runCLI(args []string, stdout, stderr io.Writer, stderrIsTerminal bool) int 
 			if !jsonLogs {
 				usage(stderr)
 			}
-			return 1
+			return 2
 		}
 		configPath = flags.Arg(0)
 	}

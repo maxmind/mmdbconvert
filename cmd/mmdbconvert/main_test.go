@@ -24,23 +24,23 @@ func TestRunCLIFormats(t *testing.T) {
 		json     bool
 		code     int
 	}{
-		{name: "auto pipe", json: true, code: 1},
-		{name: "auto terminal", terminal: true, code: 1},
-		{name: "explicit auto pipe", args: []string{"--log-format=auto"}, json: true, code: 1},
+		{name: "auto pipe", json: true, code: 2},
+		{name: "auto terminal", terminal: true, code: 2},
+		{name: "explicit auto pipe", args: []string{"--log-format=auto"}, json: true, code: 2},
 		{
 			name:     "explicit auto terminal",
 			args:     []string{"--log-format=auto"},
 			terminal: true,
-			code:     1,
+			code:     2,
 		},
 		{
 			name:     "force JSON at terminal",
 			args:     []string{"--log-format", "json"},
 			terminal: true,
 			json:     true,
-			code:     1,
+			code:     2,
 		},
-		{name: "force text in pipe", args: []string{"--log-format=text"}, code: 1},
+		{name: "force text in pipe", args: []string{"--log-format=text"}, code: 2},
 		{
 			name: "parsed override on error", args: []string{"--log-format=json", "--unknown"},
 			terminal: true, json: true, code: 2,
@@ -168,7 +168,7 @@ func TestRunCLIArgumentErrors(t *testing.T) {
 		message string
 		errText string
 	}{
-		{name: "missing config", code: 1, message: "Config file path required"},
+		{name: "missing config", code: 2, message: "Config file path required"},
 		{
 			name:    "unknown flag",
 			args:    []string{"--unknown"},

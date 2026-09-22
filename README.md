@@ -209,7 +209,8 @@ diagnostics use the same fields in a readable `key=value` format.
 `--quiet` suppresses progress messages, including startup and completion, but
 keeps errors visible in the selected format. Explicit `--help` output remains
 plain text on stderr, and `--version` remains plain text on stdout. Argument
-errors in JSON mode do not append usage text; use `--help` to see usage.
+errors exit with status 2; runtime failures exit with status 1. Argument errors
+in JSON mode do not append usage text; use `--help` to see usage.
 
 ## Configuration
 
