@@ -206,8 +206,9 @@ JSON diagnostics contain one object per line, with `time`, `level`, and
 `disable_cache`, `elapsed_ms`, or `error` (the complete error string). Version,
 configuration path, and cache settings are included on conversion and profiling
 errors even with `--quiet`. The `disable_cache` field is always a boolean,
-whether caching is enabled or disabled. Text diagnostics use the same fields in
-a readable `key=value` format.
+whether caching is enabled or disabled. Text diagnostics use a readable
+`key=value` format, with a duration such as `elapsed=2h0m0s` instead of
+`elapsed_ms`.
 
 `--quiet` suppresses progress messages, including startup and completion, but
 keeps errors visible in the selected format. Explicit `--help` output remains

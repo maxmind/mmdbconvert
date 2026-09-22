@@ -124,7 +124,7 @@ func TestRunCLISuccess(t *testing.T) {
 							stderr.String(),
 							"level=INFO message=\"Successfully completed\"",
 						)
-						assert.Contains(t, stderr.String(), "elapsed_ms=")
+						assert.Contains(t, stderr.String(), "elapsed=")
 						assert.NotContains(t, stderr.String(), "msg=")
 						return
 					}

@@ -12,7 +12,10 @@ func newLogger(w io.Writer, format string, level slog.Leveler) *slog.Logger {
 			if len(groups) == 0 && attr.Key == slog.MessageKey {
 				attr.Key = "message"
 			}
-
+			if len(groups) == 0 && format == logFormatJSON && attr.Key == "elapsed" &&
+				attr.Value.Kind() == slog.KindDuration {
+				return slog.Int64("elapsed_ms", attr.Value.Duration().Milliseconds())
+			}
 			return attr
 		},
 	}

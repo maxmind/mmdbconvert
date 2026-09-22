@@ -184,8 +184,7 @@ func run(configPath string, disableCache bool, logger *slog.Logger) error {
 
 	logger.Info(
 		"Successfully completed",
-		"elapsed_ms",
-		time.Since(startTime).Round(time.Millisecond).Milliseconds(),
+		slog.Duration("elapsed", time.Since(startTime).Round(time.Millisecond)),
 	)
 
 	return nil
