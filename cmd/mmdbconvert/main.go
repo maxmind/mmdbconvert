@@ -65,6 +65,10 @@ func runCLI(args []string, stdout, stderr io.Writer, stderrIsTerminal bool) int 
 	// Handle parser errors ourselves so usage text cannot leak into JSON logs.
 	flags.SetOutput(io.Discard)
 	parseErr := flags.Parse(args)
+	if errors.Is(parseErr, flag.ErrHelp) || (parseErr == nil && showHelp) {
+		usage(stderr)
+		return 0
+	}
 	jsonLogs := !stderrIsTerminal
 	switch logFormat {
 	case logFormatAuto:
@@ -74,10 +78,6 @@ func runCLI(args []string, stdout, stderr io.Writer, stderrIsTerminal bool) int 
 		jsonLogs = false
 	default:
 		parseErr = fmt.Errorf("invalid log format %q (expected auto, json, or text)", logFormat)
-	}
-	if errors.Is(parseErr, flag.ErrHelp) {
-		usage(stderr)
-		return 0
 	}
 	logger := newLogger(stderr, jsonLogs, quiet)
 	if parseErr != nil {
@@ -94,12 +94,6 @@ func runCLI(args []string, stdout, stderr io.Writer, stderrIsTerminal bool) int 
 			logger.Error("Writing version", "error", err)
 			return 1
 		}
-		return 0
-	}
-
-	// Handle help flag
-	if showHelp {
-		usage(stderr)
 		return 0
 	}
 
@@ -217,7 +211,7 @@ LOGGING:
     Progress and errors go to stderr. The auto format selects text when stderr
     is a terminal and JSON otherwise. JSON records contain time, level, and
     message fields, plus relevant attributes such as error or elapsed_ms.
-    Explicit help and version output remain plain text.
+    Explicit help goes to stderr and version output to stdout, both as plain text.
 
 EXAMPLES:
     # Basic usage with config file

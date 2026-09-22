@@ -192,16 +192,6 @@ func TestRunCLIArgumentErrors(t *testing.T) {
 			args:    []string{"--log-format=JSON"},
 			errText: "invalid log format",
 		},
-		{
-			name:    "invalid format with help",
-			args:    []string{"--log-format=xml", "--help"},
-			errText: "invalid log format",
-		},
-		{
-			name:    "invalid format with short help",
-			args:    []string{"--log-format=xml", "-h"},
-			errText: "invalid log format",
-		},
 	}
 	for _, format := range []string{"json", "text"} {
 		for _, tt := range tests {
@@ -324,6 +314,21 @@ func TestRunCLIHelpAndVersion(t *testing.T) {
 					assert.Contains(t, stderr.String(), "--log-format")
 					assert.NotContains(t, stderr.String(), "level=")
 				}
+			})
+		}
+	}
+}
+
+func TestRunCLIHelpWithInvalidFormat(t *testing.T) {
+	for _, help := range []string{"--help", "-h"} {
+		for _, args := range [][]string{{"--log-format=xml", help}, {help, "--log-format=xml"}} {
+			t.Run(strings.Join(args, " "), func(t *testing.T) {
+				var stdout, stderr bytes.Buffer
+				assert.Equal(t, 0, runCLI(args, &stdout, &stderr, false))
+				assert.Empty(t, stdout.String())
+				assert.Contains(t, stderr.String(), "USAGE:")
+				assert.Contains(t, stderr.String(), "--log-format")
+				assert.NotContains(t, stderr.String(), "level=")
 			})
 		}
 	}
