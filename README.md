@@ -203,8 +203,11 @@ goes. Use `--log-format=json` or `--log-format=text` to override it.
 
 JSON diagnostics contain one object per line, with `time`, `level`, and
 `message` fields. Additional fields provide context: `version`, `config_path`,
-`disable_cache`, `elapsed_ms`, or `error` (the complete error string). Text
-diagnostics use the same fields in a readable `key=value` format.
+`disable_cache`, `elapsed_ms`, or `error` (the complete error string). Version,
+configuration path, and cache settings are included on conversion and profiling
+errors even with `--quiet`. The `disable_cache` field is always a boolean,
+whether caching is enabled or disabled. Text diagnostics use the same fields in
+a readable `key=value` format.
 
 `--quiet` suppresses progress messages, including startup and completion, but
 keeps errors visible in the selected format. Explicit `--help` output remains

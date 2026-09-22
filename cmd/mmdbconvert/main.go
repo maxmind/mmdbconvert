@@ -85,7 +85,7 @@ func runCLI(args []string, stdout, stderr io.Writer, stderrIsTerminal bool) int 
 	if quiet {
 		level = slog.LevelWarn
 	}
-	logger := newLogger(stderr, format, level)
+	logger := newLogger(stderr, format, level).With("version", version)
 	if parseErr != nil {
 		logger.Error("Parsing command-line flags", "error", parseErr)
 		if format == logFormatText {
@@ -114,6 +114,7 @@ func runCLI(args []string, stdout, stderr io.Writer, stderrIsTerminal bool) int 
 		}
 		configPath = flags.Arg(0)
 	}
+	logger = logger.With("config_path", configPath, "disable_cache", disableCache)
 
 	// Start CPU profiling if requested
 	var cpuProfileFile *os.File
@@ -169,12 +170,9 @@ func runCLI(args []string, stdout, stderr io.Writer, stderrIsTerminal bool) int 
 func run(configPath string, disableCache bool, logger *slog.Logger) error {
 	startTime := time.Now()
 
-	logger.Info("mmdbconvert", "version", version)
-	logger.Info("Loading configuration", "config_path", configPath)
+	logger.Info("mmdbconvert")
+	logger.Info("Loading configuration")
 	logger.Info("Merging databases and writing output")
-	if disableCache {
-		logger.Info("Unmarshaler caching disabled", "disable_cache", true)
-	}
 
 	err := mmdbconvert.Run(mmdbconvert.Options{
 		ConfigPath:   configPath,

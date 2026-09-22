@@ -129,31 +129,16 @@ func TestRunCLISuccess(t *testing.T) {
 						return
 					}
 					records := decodeLogRecords(t, stderr.String())
-					var foundVersion, foundConfig, foundCache, foundCompletion bool
+					require.NotEmpty(t, records)
 					for _, record := range records {
 						assert.Equal(t, "INFO", record["level"])
-						if v, ok := record["version"]; ok {
-							assert.Equal(t, version, v)
-							foundVersion = true
-						}
-						if v, ok := record["config_path"]; ok {
-							assert.Equal(t, configPath, v)
-							foundConfig = true
-						}
-						if v, ok := record["disable_cache"]; ok {
-							assert.Equal(t, disableCache, v)
-							foundCache = true
-						}
-						if v, ok := record["elapsed_ms"]; ok {
-							assert.GreaterOrEqual(t, v, float64(0))
-							assert.Equal(t, "Successfully completed", record["message"])
-							foundCompletion = true
-						}
+						assert.Equal(t, version, record["version"])
+						assert.Equal(t, configPath, record["config_path"])
+						assert.Equal(t, disableCache, record["disable_cache"])
 					}
-					assert.True(t, foundVersion)
-					assert.True(t, foundConfig)
-					assert.Equal(t, disableCache, foundCache)
-					assert.True(t, foundCompletion)
+					completion := records[len(records)-1]
+					assert.Equal(t, "Successfully completed", completion["message"])
+					assert.GreaterOrEqual(t, completion["elapsed_ms"], float64(0))
 				})
 			}
 		}
@@ -309,9 +294,29 @@ func TestRunCLIOperationalErrors(t *testing.T) {
 					assert.Equal(t, "ERROR", record["level"])
 					assert.Equal(t, tt.message, record["message"])
 					assert.Contains(t, record["error"], tt.errText)
+					assert.Equal(t, version, record["version"])
+					assert.Equal(t, tt.args[len(tt.args)-1], record["config_path"])
+					assert.Equal(t, false, record["disable_cache"])
 				})
 			}
 		}
+	}
+}
+
+func TestRunCLIQuietErrorContext(t *testing.T) {
+	for _, disableCache := range []bool{false, true} {
+		t.Run(fmt.Sprintf("disable_cache=%t", disableCache), func(t *testing.T) {
+			configPath := filepath.Join(t.TempDir(), "missing.toml")
+			args := []string{"--quiet", fmt.Sprintf("--disable-cache=%t", disableCache), configPath}
+			var stdout, stderr bytes.Buffer
+			assert.Equal(t, 1, runCLI(args, &stdout, &stderr, false))
+			records := decodeLogRecords(t, stderr.String())
+			require.Len(t, records, 1)
+			assert.Equal(t, "ERROR", records[0]["level"])
+			assert.Equal(t, version, records[0]["version"])
+			assert.Equal(t, configPath, records[0]["config_path"])
+			assert.Equal(t, disableCache, records[0]["disable_cache"])
+		})
 	}
 }
 
