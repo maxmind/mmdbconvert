@@ -69,21 +69,26 @@ func runCLI(args []string, stdout, stderr io.Writer, stderrIsTerminal bool) int 
 		usage(stderr)
 		return 0
 	}
-	jsonLogs := !stderrIsTerminal
+	format := logFormatText
+	if !stderrIsTerminal {
+		format = logFormatJSON
+	}
 	switch logFormat {
 	case logFormatAuto:
-	case logFormatJSON:
-		jsonLogs = true
-	case logFormatText:
-		jsonLogs = false
+	case logFormatJSON, logFormatText:
+		format = logFormat
 	default:
 		parseErr = errors.Join(parseErr,
 			fmt.Errorf("invalid log format %q (expected auto, json, or text)", logFormat))
 	}
-	logger := newLogger(stderr, jsonLogs, quiet)
+	level := slog.LevelInfo
+	if quiet {
+		level = slog.LevelWarn
+	}
+	logger := newLogger(stderr, format, level)
 	if parseErr != nil {
 		logger.Error("Parsing command-line flags", "error", parseErr)
-		if !jsonLogs {
+		if format == logFormatText {
 			usage(stderr)
 		}
 		return 2
@@ -102,7 +107,7 @@ func runCLI(args []string, stdout, stderr io.Writer, stderrIsTerminal bool) int 
 	if configPath == "" {
 		if flags.NArg() == 0 {
 			logger.Error("Config file path required")
-			if !jsonLogs {
+			if format == logFormatText {
 				usage(stderr)
 			}
 			return 2

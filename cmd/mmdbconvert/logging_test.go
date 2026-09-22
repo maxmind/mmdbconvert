@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"errors"
+	"log/slog"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -11,7 +12,7 @@ import (
 
 func TestJSONLogEscaping(t *testing.T) {
 	var output bytes.Buffer
-	logger := newLogger(&output, true, false)
+	logger := newLogger(&output, logFormatJSON, slog.LevelInfo)
 	message := "Diagnostic with a \"quote\"\nand a new line"
 	err := errors.New("wrapped error:\n\tinvalid \"value\"")
 	logger.Error(message, "error", err)
@@ -24,7 +25,7 @@ func TestJSONLogEscaping(t *testing.T) {
 
 func TestQuietKeepsWarningsAndErrors(t *testing.T) {
 	var output bytes.Buffer
-	logger := newLogger(&output, true, true)
+	logger := newLogger(&output, logFormatJSON, slog.LevelWarn)
 	logger.Info("Progress")
 	logger.Warn("Warning")
 	logger.Error("Error")
