@@ -84,6 +84,12 @@ Split IPv4/IPv6 files are replaced separately, so a failure can leave only one
 updated. Use a fresh output directory for each build if both files must be
 published together. Abrupt termination can leave temporary files behind.
 
+The CLI handles SIGINT and SIGTERM (plus SIGHUP on Unix) by canceling conversion
+and cleaning up temporary files. Go callers can cancel with `RunContext`.
+Cleanup may wait for an operation already in progress; once publication starts,
+it finishes before exiting. A second signal can force termination without
+cleanup.
+
 #### CSV Options
 
 When `format = "csv"`, you can specify CSV-specific options:
