@@ -30,6 +30,8 @@ and this project adheres to
 - Output files are now replaced, requiring write access to their directory.
   Ownership, ACLs, and extended attributes are not preserved, and other hard
   links retain the old data.
+- Split IPv4/IPv6 outputs must refer to separate files. Filenames in the same
+  directory must differ by more than letter case.
 
 ### Fixed
 

@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/maxmind/mmdbconvert/internal/config"
 	"github.com/maxmind/mmdbconvert/internal/merger"
@@ -30,19 +32,31 @@ func prepareRowWriter(
 		paths = []string{cfg.Output.IPv4File, cfg.Output.IPv6File}
 		versions = []int{writer.IPVersion4, writer.IPVersion6}
 	}
+	destinations, err := prepareOutputPaths(paths)
+	if err != nil {
+		return nil, nil, err
+	}
 
 	var outputs []pendingOutput
 	var writers []merger.RowWriter
-	for i, path := range paths {
-		file, err := newPendingOutput(path)
+	for i, destination := range destinations {
+		file, err := newPendingOutput(destination)
 		if err != nil {
 			return nil, nil, errors.Join(err, cleanupOutputs(outputs))
 		}
-		outputs = append(outputs, file)
+		var output pendingOutput = file
+		if i == 1 {
+			output = &splitPendingOutput{
+				pendingOutput: file,
+				firstPath:     paths[0],
+				secondPath:    paths[1],
+			}
+		}
+		outputs = append(outputs, output)
 		rowWriter, err := newRowWriter(file, cfg, readers, versions[i])
 		if err != nil {
 			return nil, nil, errors.Join(
-				fmt.Errorf("preparing output %s: %w", path, err),
+				fmt.Errorf("preparing output %s: %w", destination.path, err),
 				cleanupOutputs(outputs),
 			)
 		}
@@ -54,26 +68,48 @@ func prepareRowWriter(
 	return writers[0], outputs, nil
 }
 
-func newRowWriter(
-	w io.Writer,
-	cfg *config.Config,
-	readers *mmdb.Readers,
-	ipVersion int,
-) (merger.RowWriter, error) {
-	switch cfg.Output.Format {
-	case config.OutputFormatCSV:
-		return writer.NewCSVWriter(w, cfg), nil
-	case config.OutputFormatParquet:
-		return writer.NewParquetWriterWithIPVersion(w, cfg, ipVersion)
-	case config.OutputFormatMMDB:
-		version, err := detectIPVersionFromDatabases(cfg, readers)
+type outputDestination struct {
+	path string
+	dir  string
+	info os.FileInfo
+}
+
+func prepareOutputPaths(paths []string) ([]outputDestination, error) {
+	destinations := make([]outputDestination, len(paths))
+	parents := make([]os.FileInfo, len(paths))
+	for i, path := range paths {
+		info, err := inspectOutput(path)
 		if err != nil {
 			return nil, err
 		}
-		return writer.NewMMDBWriter(w, cfg, version)
-	default:
-		return nil, fmt.Errorf("unsupported output format: %s", cfg.Output.Format)
+		// Preserve symlink/.. traversal by splitting without cleaning the path.
+		dir, _ := filepath.Split(path)
+		if dir == "" {
+			dir = "."
+		}
+		destinations[i] = outputDestination{path: path, dir: dir, info: info}
+		if len(paths) == 2 {
+			parents[i], err = os.Stat(dir)
+			if err != nil {
+				return nil, fmt.Errorf("checking output directory for %s: %w", path, err)
+			}
+		}
 	}
+	// Conservatively reject case-only differences even on case-sensitive filesystems.
+	if len(paths) == 2 {
+		if os.SameFile(parents[0], parents[1]) &&
+			strings.EqualFold(filepath.Base(paths[0]), filepath.Base(paths[1])) {
+			return nil, fmt.Errorf(
+				"output.ipv4_file and output.ipv6_file must refer to different filenames (ignoring case) in the same directory: %q and %q",
+				paths[0],
+				paths[1],
+			)
+		}
+		if sameOutputFile(destinations[0].info, destinations[1].info) {
+			return nil, outputAliasError(paths[0], paths[1])
+		}
+	}
+	return destinations, nil
 }
 
 // inspectOutput accepts regular files and returns nil for missing files.
@@ -103,6 +139,63 @@ func inspectOutput(path string) (os.FileInfo, error) {
 		kind = "special file"
 	}
 	return nil, fmt.Errorf("output %s is not a regular file (%s)", path, kind)
+}
+
+func sameOutputFile(first, second os.FileInfo) bool {
+	return first != nil && second != nil && os.SameFile(first, second)
+}
+
+func outputAliasError(first, second string) error {
+	return fmt.Errorf(
+		"output.ipv4_file and output.ipv6_file refer to the same file: %q and %q",
+		first,
+		second,
+	)
+}
+
+// splitPendingOutput checks for aliases revealed by publishing the first file.
+type splitPendingOutput struct {
+	pendingOutput
+
+	firstPath  string
+	secondPath string
+}
+
+func (f *splitPendingOutput) Commit() error {
+	first, err := inspectOutput(f.firstPath)
+	if err != nil {
+		return err
+	}
+	second, err := inspectOutput(f.secondPath)
+	if err != nil {
+		return err
+	}
+	if sameOutputFile(first, second) {
+		return outputAliasError(f.firstPath, f.secondPath)
+	}
+	return f.pendingOutput.Commit()
+}
+
+func newRowWriter(
+	w io.Writer,
+	cfg *config.Config,
+	readers *mmdb.Readers,
+	ipVersion int,
+) (merger.RowWriter, error) {
+	switch cfg.Output.Format {
+	case config.OutputFormatCSV:
+		return writer.NewCSVWriter(w, cfg), nil
+	case config.OutputFormatParquet:
+		return writer.NewParquetWriterWithIPVersion(w, cfg, ipVersion)
+	case config.OutputFormatMMDB:
+		version, err := detectIPVersionFromDatabases(cfg, readers)
+		if err != nil {
+			return nil, err
+		}
+		return writer.NewMMDBWriter(w, cfg, version)
+	default:
+		return nil, fmt.Errorf("unsupported output format: %s", cfg.Output.Format)
+	}
 }
 
 func flushAndCommit(rowWriter merger.RowWriter, outputs []pendingOutput) error {

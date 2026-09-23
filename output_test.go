@@ -13,6 +13,7 @@ import (
 	"github.com/maxmind/mmdbwriter/v2/mmdbtype"
 	maxminddb "github.com/oschwald/maxminddb-golang/v2"
 	"github.com/parquet-go/parquet-go"
+	"github.com/pelletier/go-toml/v2"
 	"github.com/stretchr/testify/require"
 
 	"github.com/maxmind/mmdbconvert/internal/config"
@@ -96,6 +97,29 @@ func TestRun_ConversionFailurePreservesOutputs(t *testing.T) {
 	}
 }
 
+func TestRun_RejectsDuplicateSplitPathsBeforeOpeningFiles(t *testing.T) {
+	for _, format := range []string{"csv", "parquet"} {
+		t.Run(format, func(t *testing.T) {
+			configPath, cfg, paths := outputTestConfig(t, format, true, `["country", "iso_code"]`)
+			cfg.Output.IPv6File = cfg.Output.IPv4File
+			// A nonexistent input makes the ordering of validation observable.
+			cfg.Databases[0].Path = filepath.Join(filepath.Dir(paths[0]), "missing.mmdb")
+			data, err := toml.Marshal(cfg)
+			require.NoError(t, err)
+			require.NoError(t, os.WriteFile(configPath, data, 0o600))
+			require.NoError(t, os.WriteFile(paths[0], []byte("previous output"), 0o600))
+			err = Run(Options{ConfigPath: configPath})
+			require.ErrorContains(
+				t,
+				err,
+				"output.ipv4_file and output.ipv6_file must refer to different paths",
+			)
+			assertFileContent(t, paths[0], "previous output")
+			assertOutputDirectory(t, paths[:1])
+		})
+	}
+}
+
 func TestPrepareRowWriter_SecondOutputFailure(t *testing.T) {
 	for _, format := range []string{"csv", "parquet"} {
 		t.Run(format, func(t *testing.T) {
@@ -107,6 +131,43 @@ func TestPrepareRowWriter_SecondOutputFailure(t *testing.T) {
 			require.ErrorContains(t, err, cfg.Output.IPv6File)
 			assertFileContent(t, paths[0], "previous output")
 			assertOutputDirectory(t, paths[:1])
+		})
+	}
+}
+
+func TestPrepareOutputPaths(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	require.NoError(t, os.Mkdir("nested", 0o700))
+	require.NoError(t, os.WriteFile("out.csv", []byte("previous output"), 0o600))
+	for _, tt := range []struct {
+		name  string
+		paths []string
+		valid bool
+	}{
+		{"identical", []string{"out.csv", "out.csv"}, false},
+		{"dot", []string{"out.csv", "./out.csv"}, false},
+		{"parent", []string{"out.csv", "nested/../out.csv"}, false},
+		{"absolute", []string{"out.csv", filepath.Join(dir, "out.csv")}, false},
+		{"case existing", []string{"out.csv", "OUT.csv"}, false},
+		{"case missing", []string{"new.csv", "NEW.csv"}, false},
+		{"different names", []string{"out.csv", "ipv6.csv"}, true},
+		{"different directories", []string{"out.csv", "nested/out.csv"}, true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			paths, err := prepareOutputPaths(tt.paths)
+			if tt.valid {
+				require.NoError(t, err)
+				require.Len(t, paths, 2)
+				for i, destination := range paths {
+					require.Equal(t, tt.paths[i], destination.path)
+				}
+			} else {
+				require.ErrorContains(t, err, "ignoring case")
+				require.Nil(t, paths)
+			}
+			assertFileContent(t, "out.csv", "previous output")
+			assertOutputDirectory(t, []string{"out.csv", "nested"})
 		})
 	}
 }
@@ -154,7 +215,7 @@ func TestOutput_FlushFailure(t *testing.T) {
 		t.Run(format, func(t *testing.T) {
 			_, cfg, paths := outputTestConfig(t, format, false, `["country", "iso_code"]`)
 			require.NoError(t, os.WriteFile(paths[0], []byte("previous output"), 0o600))
-			file, err := newPendingOutput(paths[0])
+			file, err := preparePendingOutput(paths[0])
 			require.NoError(t, err)
 			defer func() { require.NoError(t, file.Cleanup()) }()
 			writeErr := errors.New("injected write failure")
@@ -186,7 +247,7 @@ func TestOutput_SplitFlushFailure(t *testing.T) {
 	var files []pendingOutput
 	for _, path := range paths {
 		require.NoError(t, os.WriteFile(path, []byte("previous output"), 0o600))
-		file, err := newPendingOutput(path)
+		file, err := preparePendingOutput(path)
 		require.NoError(t, err)
 		files = append(files, file)
 	}
@@ -221,7 +282,7 @@ func TestPendingOutput(t *testing.T) {
 				if existing {
 					require.NoError(t, os.WriteFile(path, []byte("old"), 0o600))
 				}
-				file, err := newPendingOutput(path)
+				file, err := preparePendingOutput(path)
 				require.NoError(t, err)
 				defer func() { require.NoError(t, file.Cleanup()) }()
 				_, err = file.WriteString("new")
@@ -259,7 +320,7 @@ func TestOutput_CommitFailure(t *testing.T) {
 	_, cfg, paths := outputTestConfig(t, "csv", true, `["country", "iso_code"]`)
 	var files []pendingOutput
 	for _, path := range paths {
-		file, err := newPendingOutput(path)
+		file, err := preparePendingOutput(path)
 		require.NoError(t, err)
 		files = append(files, file)
 	}
@@ -376,7 +437,7 @@ type failingWriter struct{ err error }
 func TestPendingOutput_SyncFailure(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "output")
 	require.NoError(t, os.WriteFile(path, []byte("previous output"), 0o600))
-	file, err := newPendingOutput(path)
+	file, err := preparePendingOutput(path)
 	require.NoError(t, err)
 	require.NoError(t, file.Close())
 	require.ErrorIs(t, file.Commit(), os.ErrClosed)
@@ -461,4 +522,126 @@ func assertOutputDirectory(t *testing.T, paths []string) {
 		want = append(want, filepath.Base(path))
 	}
 	require.ElementsMatch(t, want, names)
+}
+
+// preparePendingOutput uses the same validation and staging sequence as Run.
+func preparePendingOutput(path string) (*pendingFile, error) {
+	destinations, err := prepareOutputPaths([]string{path})
+	if err != nil {
+		return nil, err
+	}
+	return newPendingOutput(destinations[0])
+}
+
+func TestOutput_ConfiguredPathInErrors(t *testing.T) {
+	t.Chdir(t.TempDir())
+	file, err := preparePendingOutput("missing/out.csv")
+	require.Nil(t, file)
+	require.ErrorContains(t, err, "creating pending output missing/out.csv:")
+
+	file, err = preparePendingOutput("./out.csv")
+	require.NoError(t, err)
+	defer func() { require.NoError(t, file.Cleanup()) }()
+	require.NoError(t, os.Mkdir("out.csv", 0o700))
+	require.ErrorContains(t, file.Commit(), "publishing output ./out.csv:")
+}
+
+func TestRun_FilesystemAliases(t *testing.T) {
+	for _, names := range [][2]string{{"caf\u00e9.csv", "cafe\u0301.csv"}, {"blocks.csv", "blocks.csv."}} {
+		for _, existing := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/existing=%t", names[1], existing), func(t *testing.T) {
+				configPath, cfg, paths := outputTestConfig(
+					t,
+					"csv",
+					true,
+					`["country", "iso_code"]`,
+				)
+				dir := filepath.Dir(paths[0])
+				first := filepath.Join(dir, names[0])
+				second := filepath.Join(dir, names[1])
+				require.NoError(t, os.WriteFile(first, []byte("previous output"), 0o600))
+				firstInfo, err := os.Stat(first)
+				require.NoError(t, err)
+				secondInfo, err := os.Stat(second)
+				if errors.Is(err, os.ErrNotExist) {
+					t.Skip("filesystem treats these names as distinct")
+				}
+				require.NoError(t, err)
+				require.True(t, os.SameFile(firstInfo, secondInfo))
+				if !existing {
+					require.NoError(t, os.Remove(first))
+				}
+				cfg.Output.IPv4File, cfg.Output.IPv6File = first, second
+				data, err := toml.Marshal(cfg)
+				require.NoError(t, err)
+				require.NoError(t, os.WriteFile(configPath, data, 0o600))
+				require.ErrorContains(
+					t,
+					Run(Options{ConfigPath: configPath}),
+					"refer to the same file",
+				)
+				if existing {
+					assertFileContent(t, first, "previous output")
+				} else {
+					contents, err := os.ReadFile(filepath.Clean(first))
+					require.NoError(t, err)
+					rows, err := csv.NewReader(bytes.NewReader(contents)).ReadAll()
+					require.NoError(t, err)
+					require.Greater(t, len(rows), 1)
+					for _, row := range rows[1:] {
+						require.True(
+							t,
+							netip.MustParsePrefix(row[0]).Addr().Is4(),
+							"preserve IPv4 publication",
+						)
+					}
+				}
+				assertOutputDirectory(t, []string{first})
+			})
+		}
+	}
+}
+
+func TestPrepareOutputPaths_HardLinks(t *testing.T) {
+	dir := t.TempDir()
+	first := filepath.Join(dir, "first.csv")
+	second := filepath.Join(dir, "second.csv")
+	require.NoError(t, os.WriteFile(first, []byte("previous output"), 0o600))
+	require.NoError(t, os.Link(first, second))
+	_, err := prepareOutputPaths([]string{first, second})
+	require.ErrorContains(t, err, "refer to the same file")
+	assertFileContent(t, first, "previous output")
+	assertFileContent(t, second, "previous output")
+	assertOutputDirectory(t, []string{first, second})
+}
+
+func TestSplitOutput_RejectsAliasAfterFirstPublication(t *testing.T) {
+	dir := t.TempDir()
+	firstPath := filepath.Join(dir, "first.csv")
+	secondPath := filepath.Join(dir, "second.csv")
+	destinations, err := prepareOutputPaths([]string{firstPath, secondPath})
+	require.NoError(t, err)
+	first, err := newPendingOutput(destinations[0])
+	require.NoError(t, err)
+	defer func() { require.NoError(t, first.Cleanup()) }()
+	second, err := newPendingOutput(destinations[1])
+	require.NoError(t, err)
+	defer func() { require.NoError(t, second.Cleanup()) }()
+	_, err = first.WriteString("IPv4")
+	require.NoError(t, err)
+	_, err = second.WriteString("IPv6")
+	require.NoError(t, err)
+	require.NoError(t, first.Commit())
+	// Model an alias that appears only when the first destination is published.
+	require.NoError(t, os.Link(firstPath, secondPath))
+	guarded := &splitPendingOutput{
+		pendingOutput: second,
+		firstPath:     firstPath,
+		secondPath:    secondPath,
+	}
+	require.ErrorContains(t, guarded.Commit(), "refer to the same file")
+	require.NoError(t, guarded.Cleanup())
+	assertFileContent(t, firstPath, "IPv4")
+	assertFileContent(t, secondPath, "IPv4")
+	assertOutputDirectory(t, []string{firstPath, secondPath})
 }

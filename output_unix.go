@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 
 	"github.com/google/renameio/v2"
 )
@@ -17,17 +19,24 @@ type pendingFile struct {
 	path string
 }
 
-func newPendingOutput(path string) (*pendingFile, error) {
-	return createPendingOutput(path, restoreOutputPermissions)
+func newPendingOutput(destination outputDestination) (*pendingFile, error) {
+	return createPendingOutput(destination, restoreOutputPermissions)
 }
 
 func createPendingOutput(
-	path string,
+	destination outputDestination,
 	restorePermissions func(*os.File, os.FileMode) error,
 ) (_ *pendingFile, retErr error) {
-	info, err := inspectOutput(path)
-	if err != nil {
-		return nil, err
+	path, info := destination.path, destination.info
+	dir := destination.dir
+	// renameio joins (and cleans) the staging path. Resolve only directories
+	// containing "..", where cleaning before following symlinks changes meaning.
+	if slices.Contains(strings.Split(dir, string(filepath.Separator)), "..") {
+		var err error
+		dir, err = filepath.EvalSymlinks(dir)
+		if err != nil {
+			return nil, fmt.Errorf("resolving output directory for %s: %w", path, err)
+		}
 	}
 	mode := os.FileMode(0o666)
 	preserveMode := info != nil && info.Mode().IsRegular()
@@ -38,7 +47,7 @@ func createPendingOutput(
 	// Restore permissions ourselves: WithExistingPermissions can leak the
 	// temporary file if chmod fails before it returns a handle.
 	file, err := renameio.NewPendingFile(path,
-		renameio.WithTempDir(filepath.Dir(path)),
+		renameio.WithTempDir(dir),
 		renameio.WithPermissions(mode),
 	)
 	if err != nil {

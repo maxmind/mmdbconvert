@@ -167,7 +167,9 @@ ipv4_file = "merged_ipv4.parquet"
 ipv6_file = "merged_ipv6.parquet"
 ```
 
-When splitting output, both `ipv4_file` and `ipv6_file` must be configured.
+When splitting output, both `ipv4_file` and `ipv6_file` must be configured. The
+paths must refer to separate files. Filenames in the same directory must differ
+by more than letter case.
 
 #### IPv6 Bucket Type Options
 

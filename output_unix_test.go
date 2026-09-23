@@ -3,12 +3,15 @@
 package mmdbconvert
 
 import (
+	"bytes"
+	"fmt"
 	"net"
 	"os"
 	"path/filepath"
 	"syscall"
 	"testing"
 
+	"github.com/pelletier/go-toml/v2"
 	"github.com/stretchr/testify/require"
 )
 
@@ -30,7 +33,7 @@ func TestPendingOutput_Permissions(t *testing.T) {
 				want = 0o640
 				require.NoError(t, os.Chmod(path, want))
 			}
-			file, err := newPendingOutput(path)
+			file, err := preparePendingOutput(path)
 			require.NoError(t, err)
 			defer file.Cleanup()
 			require.NoError(t, file.Commit())
@@ -56,7 +59,7 @@ func TestPendingOutput_RejectsSymlink(t *testing.T) {
 				paths = append(paths, target)
 			}
 			require.NoError(t, os.Symlink(target, path))
-			file, err := newPendingOutput(path)
+			file, err := preparePendingOutput(path)
 			require.Nil(t, file)
 			require.ErrorContains(t, err, "symlink")
 			require.ErrorContains(t, err, path)
@@ -102,7 +105,7 @@ func TestPendingOutput_RejectsSpecialFiles(t *testing.T) {
 				paths = append(paths, target)
 			}
 			for _, path := range paths {
-				file, outputErr := newPendingOutput(path)
+				file, outputErr := preparePendingOutput(path)
 				require.ErrorContains(t, outputErr, "not a regular file")
 				require.ErrorContains(t, outputErr, path)
 				kind := tt.kind
@@ -127,10 +130,50 @@ func TestPendingOutput_RejectsSpecialFiles(t *testing.T) {
 func TestPendingOutput_RejectsSymlinkLoop(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "loop")
 	require.NoError(t, os.Symlink(path, path))
-	file, err := newPendingOutput(path)
+	file, err := preparePendingOutput(path)
 	require.Nil(t, file)
 	require.ErrorContains(t, err, "symlink")
 	assertOutputDirectory(t, []string{path})
+}
+
+func TestRun_SplitParentAliases(t *testing.T) {
+	for _, distinct := range []bool{false, true} {
+		t.Run(fmt.Sprintf("distinct=%t", distinct), func(t *testing.T) {
+			configPath, cfg, paths := outputTestConfig(t, "csv", true, `["country", "iso_code"]`)
+			dir := filepath.Dir(paths[0])
+			parent := dir
+			if distinct {
+				parent = filepath.Join(dir, "other", "nested")
+				require.NoError(t, os.MkdirAll(parent, 0o700))
+			}
+			link := filepath.Join(dir, "alias")
+			require.NoError(t, os.Symlink(parent, link))
+			cfg.Output.IPv6File = link + "/" + filepath.Base(paths[0])
+			if distinct {
+				// Do not clean the path before the kernel resolves the symlink.
+				cfg.Output.IPv6File = link + "/../" + filepath.Base(paths[0])
+			}
+			data, err := toml.Marshal(cfg)
+			require.NoError(t, err)
+			require.NoError(t, os.WriteFile(configPath, data, 0o600))
+			require.NoError(t, os.WriteFile(paths[0], []byte("previous output"), 0o600))
+			err = Run(Options{ConfigPath: configPath})
+			if !distinct {
+				require.ErrorContains(t, err, "ignoring case")
+				assertFileContent(t, paths[0], "previous output")
+				assertOutputDirectory(t, []string{paths[0], link})
+				return
+			}
+			require.NoError(t, err)
+			for _, path := range []string{paths[0], filepath.Join(dir, "other", filepath.Base(paths[0]))} {
+				contents, err := os.ReadFile(filepath.Clean(path))
+				require.NoError(t, err)
+				require.Contains(t, string(contents), "network,country_code\n")
+				require.Greater(t, bytes.Count(contents, []byte("\n")), 1)
+			}
+			assertOutputDirectory(t, []string{paths[0], link, filepath.Join(dir, "other")})
+		})
+	}
 }
 
 func TestPendingOutput_PermissionFailureCleansUp(t *testing.T) {
@@ -140,7 +183,9 @@ func TestPendingOutput_PermissionFailureCleansUp(t *testing.T) {
 	require.NoError(t, os.Chmod(path, 0o666))
 	var staged *os.File
 	var chmodErr error
-	file, err := createPendingOutput(path, func(f *os.File, mode os.FileMode) error {
+	destinations, err := prepareOutputPaths([]string{path})
+	require.NoError(t, err)
+	file, err := createPendingOutput(destinations[0], func(f *os.File, mode os.FileMode) error {
 		staged = f
 		require.Equal(t, os.FileMode(0o666), mode)
 		require.FileExists(t, f.Name())

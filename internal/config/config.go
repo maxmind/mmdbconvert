@@ -316,6 +316,9 @@ func validate(config *Config) error {
 			"output.ipv4_file and output.ipv6_file cannot be used together with output.file",
 		)
 	}
+	if config.Output.IPv4File != "" && config.Output.IPv4File == config.Output.IPv6File {
+		return errors.New("output.ipv4_file and output.ipv6_file must refer to different paths")
+	}
 
 	// Validate Parquet compression
 	if config.Output.Format == OutputFormatParquet {

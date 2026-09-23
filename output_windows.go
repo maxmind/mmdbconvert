@@ -16,11 +16,9 @@ type pendingFile struct {
 	done   bool
 }
 
-func newPendingOutput(path string) (*pendingFile, error) {
-	if _, err := inspectOutput(path); err != nil {
-		return nil, err
-	}
-	file, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+"-*")
+func newPendingOutput(destination outputDestination) (*pendingFile, error) {
+	path := destination.path
+	file, err := os.CreateTemp(destination.dir, "."+filepath.Base(path)+"-*")
 	if err != nil {
 		return nil, fmt.Errorf("creating pending output %s: %w", path, err)
 	}
