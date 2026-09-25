@@ -2,7 +2,9 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -15,6 +17,36 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestRunCLICanceled(t *testing.T) {
+	for _, format := range []string{"json", "text"} {
+		t.Run(format, func(t *testing.T) {
+			configPath, outputPath := writeTestConfig(t, testDatabasePath(t))
+			require.NoError(t, os.WriteFile(outputPath, []byte("previous output"), 0o600))
+			ctx, cancel := context.WithCancelCause(t.Context())
+			cancel(errors.New("terminated signal received"))
+			var stdout, stderr bytes.Buffer
+			require.Equal(
+				t,
+				1,
+				runCLI(
+					ctx,
+					[]string{"--log-format=" + format, configPath},
+					&stdout,
+					&stderr,
+					false,
+				),
+			)
+			require.Empty(t, stdout.String())
+			require.Contains(t, stderr.String(), "context canceled")
+			require.Contains(t, stderr.String(), "terminated signal received")
+			require.NotContains(t, stderr.String(), "Successfully completed")
+			data, err := os.ReadFile(filepath.Clean(outputPath))
+			require.NoError(t, err)
+			require.Equal(t, "previous output", string(data))
+		})
+	}
+}
 
 func TestRunCLIFormats(t *testing.T) {
 	tests := []struct {
@@ -78,7 +110,7 @@ func TestRunCLIFormats(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var stdout, stderr bytes.Buffer
-			assert.Equal(t, tt.code, runCLI(tt.args, &stdout, &stderr, tt.terminal))
+			assert.Equal(t, tt.code, runCLI(t.Context(), tt.args, &stdout, &stderr, tt.terminal))
 			assert.Empty(t, stdout.String())
 			if tt.json {
 				records := decodeLogRecords(t, stderr.String())
@@ -107,7 +139,7 @@ func TestRunCLISuccess(t *testing.T) {
 						configPath,
 					}
 					var stdout, stderr bytes.Buffer
-					assert.Equal(t, 0, runCLI(args, &stdout, &stderr, false))
+					assert.Equal(t, 0, runCLI(t.Context(), args, &stdout, &stderr, false))
 					assert.Empty(t, stdout.String())
 					output, err := os.ReadFile(filepath.Clean(outputPath))
 					require.NoError(t, err)
@@ -219,7 +251,7 @@ func TestRunCLIArgumentErrors(t *testing.T) {
 				if code == 0 {
 					code = 2
 				}
-				assert.Equal(t, code, runCLI(args, &stdout, &stderr, format == "text"))
+				assert.Equal(t, code, runCLI(t.Context(), args, &stdout, &stderr, format == "text"))
 				assert.Empty(t, stdout.String())
 				message := tt.message
 				if message == "" {
@@ -293,7 +325,7 @@ func TestRunCLIOperationalErrors(t *testing.T) {
 						[]string{"--log-format=" + format, fmt.Sprintf("--quiet=%t", quiet)},
 						tt.args...)
 					var stdout, stderr bytes.Buffer
-					assert.Equal(t, 1, runCLI(args, &stdout, &stderr, false))
+					assert.Equal(t, 1, runCLI(t.Context(), args, &stdout, &stderr, false))
 					assert.Empty(t, stdout.String())
 					assert.NotContains(t, stderr.String(), "USAGE:")
 					if format == "text" {
@@ -327,7 +359,7 @@ func TestRunCLIQuietErrorContext(t *testing.T) {
 			configPath := filepath.Join(t.TempDir(), "missing.toml")
 			args := []string{"--quiet", fmt.Sprintf("--disable-cache=%t", disableCache), configPath}
 			var stdout, stderr bytes.Buffer
-			assert.Equal(t, 1, runCLI(args, &stdout, &stderr, false))
+			assert.Equal(t, 1, runCLI(t.Context(), args, &stdout, &stderr, false))
 			records := decodeLogRecords(t, stderr.String())
 			require.Len(t, records, 1)
 			assert.Equal(t, "ERROR", records[0]["level"])
@@ -344,7 +376,7 @@ func TestRunCLIHelpAndVersion(t *testing.T) {
 			t.Run(format+"/"+flagName, func(t *testing.T) {
 				var stdout, stderr bytes.Buffer
 				args := []string{"--quiet", "--log-format=" + format, flagName}
-				assert.Equal(t, 0, runCLI(args, &stdout, &stderr, false))
+				assert.Equal(t, 0, runCLI(t.Context(), args, &stdout, &stderr, false))
 				if flagName == "--version" {
 					assert.Equal(t, "mmdbconvert version "+version+"\n", stdout.String())
 					assert.Empty(t, stderr.String())
@@ -364,7 +396,7 @@ func TestRunCLIHelpWithInvalidFormat(t *testing.T) {
 		for _, args := range [][]string{{"--log-format=xml", help}, {help, "--log-format=xml"}} {
 			t.Run(strings.Join(args, " "), func(t *testing.T) {
 				var stdout, stderr bytes.Buffer
-				assert.Equal(t, 0, runCLI(args, &stdout, &stderr, false))
+				assert.Equal(t, 0, runCLI(t.Context(), args, &stdout, &stderr, false))
 				assert.Empty(t, stdout.String())
 				assert.Contains(t, stderr.String(), "USAGE:")
 				assert.Contains(t, stderr.String(), "--log-format")
@@ -379,7 +411,7 @@ func TestRunCLIVersionWriteError(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, stdout.Close())
 	var stderr bytes.Buffer
-	assert.Equal(t, 1, runCLI([]string{"--version"}, stdout, &stderr, false))
+	assert.Equal(t, 1, runCLI(t.Context(), []string{"--version"}, stdout, &stderr, false))
 	records := decodeLogRecords(t, stderr.String())
 	require.Len(t, records, 1)
 	assert.Equal(t, "ERROR", records[0]["level"])
@@ -401,7 +433,7 @@ func TestRunCLIProfiling(t *testing.T) {
 			}
 			var stdout, stderr bytes.Buffer
 			args := []string{"--quiet", "--cpuprofile", cpuPath, "--memprofile", memoryPath, path}
-			assert.Equal(t, wantCode, runCLI(args, &stdout, &stderr, false))
+			assert.Equal(t, wantCode, runCLI(t.Context(), args, &stdout, &stderr, false))
 			assert.Empty(t, stdout.String())
 			if failConversion {
 				records := decodeLogRecords(t, stderr.String())
@@ -430,7 +462,7 @@ func TestRunCLIConversionAndMemoryProfileErrors(t *testing.T) {
 	memoryPath := t.TempDir()
 	var stdout, stderr bytes.Buffer
 	args := []string{"--quiet", "--cpuprofile", cpuPath, "--memprofile", memoryPath, configPath}
-	assert.Equal(t, 1, runCLI(args, &stdout, &stderr, false))
+	assert.Equal(t, 1, runCLI(t.Context(), args, &stdout, &stderr, false))
 	assert.Empty(t, stdout.String())
 	records := decodeLogRecords(t, stderr.String())
 	require.Len(t, records, 2)
@@ -454,7 +486,7 @@ func TestRunCLICPUProfileAlreadyStarted(t *testing.T) {
 	cpuPath := filepath.Join(t.TempDir(), "cpu.prof")
 	var stdout, stderr bytes.Buffer
 	args := []string{"--quiet", "--cpuprofile", cpuPath, "config.toml"}
-	assert.Equal(t, 1, runCLI(args, &stdout, &stderr, false))
+	assert.Equal(t, 1, runCLI(t.Context(), args, &stdout, &stderr, false))
 	assert.Empty(t, stdout.String())
 	records := decodeLogRecords(t, stderr.String())
 	require.Len(t, records, 1)

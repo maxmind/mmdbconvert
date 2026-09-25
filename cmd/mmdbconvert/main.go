@@ -2,6 +2,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"fmt"
@@ -26,10 +27,17 @@ const (
 var version = unknownVersion
 
 func main() {
-	os.Exit(runCLI(os.Args[1:], os.Stdout, os.Stderr, term.IsTerminal(int(os.Stderr.Fd()))))
+	os.Exit(runWithSignals(func(ctx context.Context) int {
+		return runCLI(ctx, os.Args[1:], os.Stdout, os.Stderr, term.IsTerminal(int(os.Stderr.Fd())))
+	}))
 }
 
-func runCLI(args []string, stdout, stderr io.Writer, stderrIsTerminal bool) int {
+func runCLI(
+	ctx context.Context,
+	args []string,
+	stdout, stderr io.Writer,
+	stderrIsTerminal bool,
+) int {
 	// Define command-line flags
 	var (
 		configPath   string
@@ -142,9 +150,13 @@ func runCLI(args []string, stdout, stderr io.Writer, stderrIsTerminal bool) int 
 	}
 
 	// Run the conversion
-	runErr := run(configPath, disableCache, logger)
+	runErr := run(ctx, configPath, disableCache, logger)
 	if runErr != nil {
-		logger.Error("Converting databases", "error", runErr)
+		if cause := context.Cause(ctx); cause != nil {
+			logger.Error("Converting databases", "error", runErr, "cause", cause)
+		} else {
+			logger.Error("Converting databases", "error", runErr)
+		}
 	}
 
 	// Stop CPU profiling and close file before potentially exiting
@@ -176,14 +188,14 @@ func runCLI(args []string, stdout, stderr io.Writer, stderrIsTerminal bool) int 
 }
 
 // run performs the main conversion process.
-func run(configPath string, disableCache bool, logger *slog.Logger) error {
+func run(ctx context.Context, configPath string, disableCache bool, logger *slog.Logger) error {
 	startTime := time.Now()
 
 	logger.Info("Starting mmdbconvert")
 	logger.Info("Loading configuration")
 	logger.Info("Merging databases and writing output")
 
-	err := mmdbconvert.Run(mmdbconvert.Options{
+	err := mmdbconvert.RunContext(ctx, mmdbconvert.Options{
 		ConfigPath:   configPath,
 		DisableCache: disableCache,
 	})

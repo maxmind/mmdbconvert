@@ -128,7 +128,7 @@ func TestPrepareRowWriter_SecondOutputFailure(t *testing.T) {
 			require.NoError(t, os.WriteFile(paths[0], []byte("previous output"), 0o600))
 			cfg.Output.IPv6File = filepath.Join(filepath.Dir(paths[1]), "missing", "out")
 			readers := openOutputTestReaders(t, cfg)
-			_, _, err := prepareRowWriter(cfg, readers)
+			_, _, err := prepareRowWriter(t.Context(), cfg, readers)
 			require.ErrorContains(t, err, cfg.Output.IPv6File)
 			assertFileContent(t, paths[0], "previous output")
 			assertOutputDirectory(t, paths[:1])
@@ -234,7 +234,7 @@ func TestOutput_FlushFailure(t *testing.T) {
 					[]mmdbtype.DataType{mmdbtype.String("GB")},
 				),
 			)
-			err = flushAndCommit(rowWriter, []pendingOutput{file})
+			err = flushAndCommit(t.Context(), rowWriter, []pendingOutput{file})
 			require.ErrorIs(t, err, writeErr)
 			require.NoError(t, file.Cleanup())
 			assertFileContent(t, paths[0], "previous output")
@@ -266,7 +266,7 @@ func TestOutput_SplitFlushFailure(t *testing.T) {
 			),
 		)
 	}
-	require.ErrorIs(t, flushAndCommit(split, files), writeErr)
+	require.ErrorIs(t, flushAndCommit(t.Context(), split, files), writeErr)
 	require.NoError(t, cleanupOutputs(files))
 	for _, path := range paths {
 		assertFileContent(t, path, "previous output")
@@ -355,7 +355,7 @@ func TestOutput_CommitFailure(t *testing.T) {
 			[]mmdbtype.DataType{mmdbtype.String("GB")},
 		),
 	)
-	require.ErrorContains(t, flushAndCommit(split, files), paths[1])
+	require.ErrorContains(t, flushAndCommit(t.Context(), split, files), paths[1])
 	require.NoError(t, cleanupOutputs(files))
 	assertFileContent(t, paths[0], "network,country_code\n2.0.0.0/24,GB\n")
 	require.DirExists(t, paths[1])
@@ -395,7 +395,7 @@ func TestConvert_PreservesPrimaryAndCleanupErrors(t *testing.T) {
 			case "publication":
 				first.commitErr = primaryErr
 			}
-			err := convert(cfg, readers, rowWriter, []pendingOutput{first, second})
+			err := convert(t.Context(), cfg, readers, rowWriter, []pendingOutput{first, second})
 			if stage != "cleanup only" {
 				require.ErrorIs(t, err, primaryErr)
 			}

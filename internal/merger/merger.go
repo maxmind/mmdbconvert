@@ -7,6 +7,7 @@
 package merger
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/netip"
@@ -187,12 +188,18 @@ func NewMerger(readers *mmdb.Readers, cfg *config.Config, writer RowWriter) (*Me
 // Merge performs the streaming merge of all databases.
 // It uses nested NetworksWithin iteration to find the smallest overlapping
 // networks across all databases, then extracts data and streams to accumulator.
-func (m *Merger) Merge() error {
+func (m *Merger) Merge(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("starting merge: %w", err)
+	}
 	// readersList and dbNamesList are already built in NewMerger()
 	firstReader := m.readersList[0]
 
 	// Iterate all networks in the first database
 	for result := range firstReader.Networks(maxminddb.IncludeNetworksWithoutData()) {
+		if err := ctx.Err(); err != nil {
+			return fmt.Errorf("iterating first database: %w", err)
+		}
 		if err := result.Err(); err != nil {
 			return fmt.Errorf("iterating first database: %w", err)
 		}
@@ -212,11 +219,14 @@ func (m *Merger) Merge() error {
 		m.resultsBuffer[0] = result
 
 		// Process this network through remaining databases starting at index 1
-		if err := m.processNetwork(prefix, 1); err != nil {
+		if err := m.processNetwork(ctx, prefix, 1); err != nil {
 			return err
 		}
 	}
 
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("flushing accumulator: %w", err)
+	}
 	// Flush any remaining accumulated data
 	if err := m.acc.Flush(); err != nil {
 		return fmt.Errorf("flushing accumulator: %w", err)
@@ -233,6 +243,7 @@ func (m *Merger) Merge() error {
 // - effectivePrefix is the smallest network across all databases so far.
 // - With IncludeNetworksWithoutData, we always get at least one Result per database.
 func (m *Merger) processNetwork(
+	ctx context.Context,
 	effectivePrefix netip.Prefix,
 	dbIndex int,
 ) error {
@@ -247,6 +258,9 @@ func (m *Merger) processNetwork(
 	// Iterate networks within effectivePrefix in this database
 	// With IncludeNetworksWithoutData, this ALWAYS yields at least one Result
 	for result := range currentReader.NetworksWithin(effectivePrefix, maxminddb.IncludeNetworksWithoutData()) {
+		if err := ctx.Err(); err != nil {
+			return fmt.Errorf("iterating database within %s: %w", effectivePrefix, err)
+		}
 		if err := result.Err(); err != nil {
 			return fmt.Errorf("iterating database within %s: %w", effectivePrefix, err)
 		}
@@ -262,7 +276,7 @@ func (m *Merger) processNetwork(
 		// Recurse with the smallest prefix
 		// NOTE: smallest may be smaller than result.Prefix() - that's OK!
 		// The result contains data for a broader network that covers smallest.
-		if err := m.processNetwork(smallest, dbIndex+1); err != nil {
+		if err := m.processNetwork(ctx, smallest, dbIndex+1); err != nil {
 			return err
 		}
 

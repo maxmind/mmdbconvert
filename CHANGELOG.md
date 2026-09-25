@@ -15,6 +15,9 @@ and this project adheres to
   override automatic selection. JSON records use `time`, `level`, and `message`
   fields with additional context, including `error` for failures.
 - Per-column CSV formats for fixed-precision floats and custom boolean labels.
+- Cooperative cancellation via `RunContext` and CLI handling of SIGINT and
+  SIGTERM, plus SIGHUP on Unix. Cancellation cleans up temporary files and
+  preserves existing output until publication starts.
 
 ### Changed
 

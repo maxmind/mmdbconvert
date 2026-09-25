@@ -1,6 +1,7 @@
 package mmdbconvert
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -23,6 +24,7 @@ type pendingOutput interface {
 }
 
 func prepareRowWriter(
+	ctx context.Context,
 	cfg *config.Config,
 	readers *mmdb.Readers,
 ) (merger.RowWriter, []pendingOutput, error) {
@@ -40,6 +42,12 @@ func prepareRowWriter(
 	var outputs []pendingOutput
 	var writers []merger.RowWriter
 	for i, destination := range destinations {
+		if err := ctx.Err(); err != nil {
+			return nil, nil, errors.Join(
+				fmt.Errorf("preparing outputs: %w", err),
+				cleanupOutputs(outputs),
+			)
+		}
 		file, err := newPendingOutput(destination)
 		if err != nil {
 			return nil, nil, errors.Join(err, cleanupOutputs(outputs))
@@ -53,7 +61,12 @@ func prepareRowWriter(
 			}
 		}
 		outputs = append(outputs, output)
-		rowWriter, err := newRowWriter(file, cfg, readers, versions[i])
+		rowWriter, err := newRowWriter(
+			contextWriter{ctx: ctx, writer: file},
+			cfg,
+			readers,
+			versions[i],
+		)
 		if err != nil {
 			return nil, nil, errors.Join(
 				fmt.Errorf("preparing output %s: %w", destination.path, err),
@@ -200,12 +213,43 @@ func newRowWriter(
 	}
 }
 
-func flushAndCommit(rowWriter merger.RowWriter, outputs []pendingOutput) error {
+// contextWriter checks cancellation at serialization write boundaries. It never
+// closes the underlying output; the conversion goroutine retains cleanup ownership.
+//
+//nolint:containedctx // io.Writer cannot take a context argument; this adapter belongs to one conversion.
+type contextWriter struct {
+	ctx    context.Context
+	writer io.Writer
+}
+
+func (w contextWriter) Write(p []byte) (int, error) {
+	if err := w.ctx.Err(); err != nil {
+		return 0, fmt.Errorf("writing output: %w", err)
+	}
+	n, err := w.writer.Write(p)
+	if err != nil {
+		return n, fmt.Errorf("writing output: %w", err)
+	}
+	return n, nil
+}
+
+func flushAndCommit(
+	ctx context.Context,
+	rowWriter merger.RowWriter,
+	outputs []pendingOutput,
+) error {
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("flushing output: %w", err)
+	}
 	if flusher, ok := rowWriter.(interface{ Flush() error }); ok {
 		if err := flusher.Flush(); err != nil {
 			return fmt.Errorf("flushing output: %w", err)
 		}
 	}
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("publishing outputs: %w", err)
+	}
+	// Once publication starts, finish the commit sequence even if canceled.
 	// All writers must flush before any output is published.
 	for _, file := range outputs {
 		if err := file.Commit(); err != nil {
