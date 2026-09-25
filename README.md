@@ -177,6 +177,9 @@ mmdbconvert config.toml
 # Explicit config flag
 mmdbconvert --config config.toml
 
+# Supply parameters used in the config's filesystem paths
+mmdbconvert --config config.toml --var input_mmdb=/data/source.mmdb --var output_dir=/out
+
 # Suppress progress output
 mmdbconvert --config config.toml --quiet
 
@@ -219,6 +222,11 @@ in JSON mode do not append usage text; use `--help` to see usage.
 ## Configuration
 
 See [docs/config.md](docs/config.md) for complete configuration reference.
+
+Database and output paths support `${name}` parameters via repeatable
+`--var NAME=VALUE` flags. See
+[Filesystem path parameters](docs/config.md#filesystem-path-parameters) for
+usage and Go API details.
 
 ### CSV Output Example
 

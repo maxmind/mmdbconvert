@@ -9,11 +9,13 @@ import (
 	"log/slog"
 	"os"
 	"runtime/pprof"
+	"strings"
 	"time"
 
 	"golang.org/x/term"
 
 	"github.com/maxmind/mmdbconvert"
+	"github.com/maxmind/mmdbconvert/internal/config"
 )
 
 const (
@@ -44,6 +46,22 @@ func runCLI(args []string, stdout, stderr io.Writer, stderrIsTerminal bool) int 
 
 	flags := flag.NewFlagSet("mmdbconvert", flag.ContinueOnError)
 	flags.StringVar(&configPath, "config", "", "Path to TOML configuration file")
+	variables := map[string]string{}
+	flags.Func(
+		"var",
+		"Set a filesystem path parameter (NAME=VALUE; repeatable)",
+		func(assignment string) error {
+			name, value, ok := strings.Cut(assignment, "=")
+			if !ok {
+				return errors.New("expected NAME=VALUE")
+			}
+			if err := config.ValidateVariableName(name); err != nil {
+				return err
+			}
+			variables[name] = value
+			return nil
+		},
+	)
 	flags.StringVar(
 		&logFormat,
 		"log-format",
@@ -142,7 +160,11 @@ func runCLI(args []string, stdout, stderr io.Writer, stderrIsTerminal bool) int 
 	}
 
 	// Run the conversion
-	runErr := run(configPath, disableCache, logger)
+	runErr := run(mmdbconvert.Options{
+		ConfigPath:   configPath,
+		Variables:    variables,
+		DisableCache: disableCache,
+	}, logger)
 	if runErr != nil {
 		logger.Error("Converting databases", "error", runErr)
 	}
@@ -176,17 +198,14 @@ func runCLI(args []string, stdout, stderr io.Writer, stderrIsTerminal bool) int 
 }
 
 // run performs the main conversion process.
-func run(configPath string, disableCache bool, logger *slog.Logger) error {
+func run(opts mmdbconvert.Options, logger *slog.Logger) error {
 	startTime := time.Now()
 
 	logger.Info("Starting mmdbconvert")
 	logger.Info("Loading configuration")
 	logger.Info("Merging databases and writing output")
 
-	err := mmdbconvert.Run(mmdbconvert.Options{
-		ConfigPath:   configPath,
-		DisableCache: disableCache,
-	})
+	err := mmdbconvert.Run(opts)
 	if err != nil {
 		return err
 	}
@@ -211,6 +230,7 @@ USAGE:
 
 OPTIONS:
     --config <file>         Path to TOML configuration file
+    --var <NAME=VALUE>      Set a filesystem path parameter (repeatable)
     --log-format <format>   Diagnostic format: auto (default), json, or text
     --quiet                 Suppress progress output; errors remain visible
     --disable-cache         Disable MMDB unmarshaler caching to reduce memory (several times slower)
@@ -232,6 +252,9 @@ EXAMPLES:
     # Using explicit flag
     mmdbconvert --config config.toml
 
+    # Supply parameters used by filesystem paths in the config
+    mmdbconvert --config config.toml --var input_mmdb=/data/source.mmdb --var output_dir=/out
+
     # Suppress progress output
     mmdbconvert --config config.toml --quiet
 
@@ -243,6 +266,10 @@ EXAMPLES:
     mmdbconvert --config config.toml --cpuprofile cpu.prof --memprofile mem.prof --quiet
 
 CONFIGURATION:
+    Filesystem paths support ${name} parameters supplied with --var. Use $${name}
+    for literal ${name}. Values are substituted once, without environment lookup.
+    Undefined references and unused variables are errors. Relative paths resolve
+    against the working directory. Put flags before a positional config path.
     See docs/config.md for configuration file format and options.
 
 MORE INFORMATION:

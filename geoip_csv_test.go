@@ -15,7 +15,7 @@ import (
 
 func TestRun_CityCSVParity(t *testing.T) {
 	const fixtureDir = "testdata/geoip-csv"
-	cfg, err := config.LoadConfig(filepath.Join(fixtureDir, "city.toml"))
+	cfg, err := config.LoadConfig(filepath.Join(fixtureDir, "city.toml"), nil)
 	require.NoError(t, err)
 	dir := t.TempDir()
 	cfg.Output.IPv4File = filepath.Join(dir, "ipv4.csv")

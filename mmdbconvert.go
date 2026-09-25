@@ -16,6 +16,12 @@ type Options struct {
 	// ConfigPath is the path to a TOML configuration file (required).
 	ConfigPath string
 
+	// Variables supplies literal values for ${name} parameters in database and
+	// output filesystem paths. Names must match [A-Za-z_][A-Za-z0-9_]*. Undefined
+	// references and unused variables are errors. Values are not expanded again,
+	// and Run does not modify this map. Use $${name} in a path for literal ${name}.
+	Variables map[string]string
+
 	// DisableCache disables MMDB unmarshaler caching to reduce memory usage.
 	// This makes processing several times slower but uses less memory.
 	DisableCache bool
@@ -27,7 +33,7 @@ func Run(opts Options) error {
 		return errors.New("config path is required")
 	}
 
-	cfg, err := config.LoadConfig(opts.ConfigPath)
+	cfg, err := config.LoadConfig(opts.ConfigPath, opts.Variables)
 	if err != nil {
 		return fmt.Errorf("loading config: %w", err)
 	}

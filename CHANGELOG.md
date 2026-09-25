@@ -10,6 +10,8 @@ and this project adheres to
 
 ### Added
 
+- Runtime parameters in database and output file paths using `${name}`, supplied
+  through repeatable `--var NAME=VALUE` flags or Go's `Options.Variables`.
 - Structured JSON diagnostics when stderr is not a terminal, with text
   diagnostics at a terminal. The new `--log-format=auto|json|text` flag can
   override automatic selection. JSON records use `time`, `level`, and `message`
@@ -18,6 +20,9 @@ and this project adheres to
 
 ### Changed
 
+- Filesystem paths now interpret `${name}` as a parameter, even when no
+  variables are supplied. Undefined parameters are errors; use `$${name}` for a
+  literal `${name}` in a path.
 - Updated to mmdbwriter/v2 for faster MMDB output with lower memory usage.
 - Go 1.27 or later is now required to build from source.
 - Progress output now goes to stderr alongside errors and uses structured
