@@ -1,0 +1,3 @@
+# Preserve byte-for-byte CSV fixtures on every checkout platform.
+*.csv -text
+*.mmdb binary

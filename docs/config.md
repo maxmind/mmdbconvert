@@ -64,6 +64,26 @@ include_empty_rows = false  # Include rows with no MMDB data (default: false)
   associated data. Network columns (CIDR, start_ip, etc.) are always present and
   don't affect this filtering.
 
+#### Output Publication
+
+mmdbconvert writes temporary files in the destination directory and replaces the
+outputs only after conversion and flushing succeed. Errors at these stages leave
+existing files unchanged. The directory must already exist and be writable.
+
+Output paths must be regular files or new files. Symlinks and special files,
+such as `/dev/stdout`, are not supported.
+
+On Unix, each file is replaced atomically: readers see either the previous file
+or the complete new file. Windows does not guarantee atomic replacement.
+
+Replacement creates a new file, so ownership, ACLs, and extended attributes are
+not preserved; other hard links keep the old contents. On Unix, replacement
+preserves the existing file's read, write, and execute permissions.
+
+Split IPv4/IPv6 files are replaced separately, so a failure can leave only one
+updated. Use a fresh output directory for each build if both files must be
+published together. Abrupt termination can leave temporary files behind.
+
 #### CSV Options
 
 When `format = "csv"`, you can specify CSV-specific options:
@@ -147,7 +167,9 @@ ipv4_file = "merged_ipv4.parquet"
 ipv6_file = "merged_ipv6.parquet"
 ```
 
-When splitting output, both `ipv4_file` and `ipv6_file` must be configured.
+When splitting output, both `ipv4_file` and `ipv6_file` must be configured. The
+paths must refer to separate files. Filenames in the same directory must differ
+by more than letter case.
 
 #### IPv6 Bucket Type Options
 
@@ -268,6 +290,42 @@ output_path = ["country", "iso_code"]  # Optional: path for MMDB output (default
 - `output_path` - (Optional) Path for nested structure in MMDB output. If not
   specified, defaults to a flat structure using `[name]` as the path. Only
   relevant for MMDB output format.
+- `format` - (Optional) CSV value formatting, described below. Rejected for
+  Parquet and MMDB output.
+
+#### CSV Column Formats
+
+Set `format` on an individual column to control its text representation. Set
+either `precision` or both `true` and `false`. Do not combine `precision` with
+`true` or `false`.
+
+```toml
+[[columns]]
+name = "latitude"
+database = "city"
+path = ["location", "latitude"]
+format = { precision = 4 }
+
+[[columns]]
+name = "is_anycast"
+database = "city"
+path = ["traits", "is_anycast"]
+format = { true = "1", false = "" }
+```
+
+- `precision` sets the number of decimal places for floating-point values, from
+  0 through 1000. With precision 4, `37.751` becomes `37.7510` and `35.68536`
+  rounds to `35.6854`.
+- `true` and `false` set labels for booleans and may be empty strings.
+
+Without `format`, floats use their shortest representation and booleans use
+`1`/`0`. Missing values remain empty, regardless of the format. Formatting does
+not affect row filtering or network merging.
+
+A format applied to the wrong type, including a map or array, stops conversion
+with an error naming the column. Strings and integers are not converted. Invalid
+options, including formats on Parquet or MMDB columns, are rejected when loading
+the configuration.
 
 #### Path Syntax
 

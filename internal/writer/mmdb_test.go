@@ -1,8 +1,9 @@
 package writer
 
 import (
+	"bytes"
+	"io"
 	"net/netip"
-	"path/filepath"
 	"testing"
 
 	"github.com/maxmind/mmdbwriter/v2/mmdbtype"
@@ -44,8 +45,8 @@ func TestMMDBWriter_RoundTrip(t *testing.T) {
 					{Name: "count"},
 				},
 			}
-			path := filepath.Join(t.TempDir(), "output.mmdb")
-			writer, err := NewMMDBWriter(path, cfg, tt.ipVersion)
+			var output bytes.Buffer
+			writer, err := NewMMDBWriter(&output, cfg, tt.ipVersion)
 			require.NoError(t, err)
 
 			prefix := netip.MustParsePrefix(tt.prefix)
@@ -59,7 +60,7 @@ func TestMMDBWriter_RoundTrip(t *testing.T) {
 			}))
 			require.NoError(t, writer.Flush())
 
-			reader, err := maxminddb.Open(path)
+			reader, err := maxminddb.OpenBytes(output.Bytes())
 			require.NoError(t, err)
 			defer reader.Close()
 			assert.EqualValues(t, tt.ipVersion, reader.Metadata.IPVersion)
@@ -107,7 +108,7 @@ func TestMMDBWriter_InvalidNetworks(t *testing.T) {
 		},
 		Columns: []config.Column{{Name: "value", OutputPath: &config.Path{"value"}}},
 	}
-	writer, err := NewMMDBWriter(filepath.Join(t.TempDir(), "output.mmdb"), cfg, 4)
+	writer, err := NewMMDBWriter(io.Discard, cfg, 4)
 	require.NoError(t, err)
 	data := []mmdbtype.DataType{mmdbtype.String("test")}
 

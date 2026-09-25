@@ -133,6 +133,7 @@ type Column struct {
 	Path       Path            `toml:"path"`        // Path segments to the field
 	OutputPath *Path           `toml:"output_path"` // Path segments for MMDB output (defaults to [name])
 	Type       string          `toml:"type"`        // Optional type hint: "string", "int64", "float64", "bool", "binary" (Parquet only)
+	Format     *ColumnFormat   `toml:"format"`      // Optional CSV value formatting
 }
 
 // Path represents the decoded path segments for MMDB lookup.
@@ -192,7 +193,7 @@ func LoadConfig(path string) (*Config, error) {
 	applyDefaults(&config)
 
 	// Validate configuration
-	if err := validate(&config); err != nil {
+	if err := validate(&config, data); err != nil {
 		return nil, fmt.Errorf("invalid configuration: %w", err)
 	}
 
@@ -284,7 +285,17 @@ func applyDefaults(config *Config) {
 // validate performs comprehensive validation of the configuration.
 //
 //nolint:gocyclo // Configuration validation is inherently complex
-func validate(config *Config) error {
+func validate(config *Config, data []byte) error {
+	// Check names first so format errors can identify their columns.
+	for _, col := range config.Columns {
+		if col.Name == "" {
+			return errors.New("column name is required")
+		}
+	}
+	if err := validateFormatKeys(data); err != nil {
+		return err
+	}
+
 	// Validate output settings
 	if config.Output.Format == "" {
 		return errors.New("output.format is required")
@@ -305,6 +316,9 @@ func validate(config *Config) error {
 		return errors.New(
 			"output.ipv4_file and output.ipv6_file cannot be used together with output.file",
 		)
+	}
+	if config.Output.IPv4File != "" && config.Output.IPv4File == config.Output.IPv6File {
+		return errors.New("output.ipv4_file and output.ipv6_file must refer to different paths")
 	}
 
 	// Validate Parquet compression
@@ -431,8 +445,8 @@ func validate(config *Config) error {
 	}
 	dataColNames := map[mmdbtype.String]bool{}
 	for _, col := range config.Columns {
-		if col.Name == "" {
-			return errors.New("column name is required")
+		if err := col.Format.validate(config.Output.Format); err != nil {
+			return fmt.Errorf("column '%s': %w", col.Name, err)
 		}
 		if col.Database == "" {
 			return fmt.Errorf("column database is required for column '%s'", col.Name)

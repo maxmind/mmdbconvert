@@ -14,6 +14,7 @@ and this project adheres to
   diagnostics at a terminal. The new `--log-format=auto|json|text` flag can
   override automatic selection. JSON records use `time`, `level`, and `message`
   fields with additional context, including `error` for failures.
+- Per-column CSV formats for fixed-precision floats and custom boolean labels.
 
 ### Changed
 
@@ -23,6 +24,15 @@ and this project adheres to
   logging in both formats. `--quiet` continues to suppress progress while
   retaining errors. Explicit help and version output remain plain text. Missing
   configuration arguments exit with status 2, like other usage errors.
+- Output paths must be regular files or new files. Symlinks and special files,
+  such as `/dev/stdout`, are no longer supported. Configure a symlink's target
+  directly, and have streaming consumers read the completed output file.
+- Output files are now replaced, requiring write access to their directory. On
+  Unix, replacement can overwrite a read-only file. Ownership, ACLs, and
+  extended attributes are not preserved, and other hard links retain the old
+  data.
+- Split IPv4/IPv6 outputs must refer to separate files. Filenames in the same
+  directory must differ by more than letter case.
 
 ### Fixed
 
@@ -31,6 +41,9 @@ and this project adheres to
   including when an IP family has no records. This applies when `include_header`
   is enabled (the default).
 - MMDB output now uses the column name when `output_path` is omitted.
+- Existing CSV, Parquet, and MMDB output is now preserved when conversion or
+  flushing fails. Previously ignored close errors are now reported. Replacement
+  is atomic per file on Unix; split files are replaced separately.
 
 ## [0.2.1] - 2026-05-01
 

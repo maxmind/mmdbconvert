@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -581,6 +582,54 @@ path = ["country", "iso_code"]
 	_, err := LoadConfig(path)
 	if err == nil || !strings.Contains(err.Error(), "either output.file must be set") {
 		t.Fatalf("expected error about providing both ipv4 and ipv6 files, got %v", err)
+	}
+}
+
+func TestLoadConfig_SplitOutputPaths(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	for _, format := range []string{"csv", "parquet"} {
+		for _, tt := range []struct {
+			name  string
+			ipv4  string
+			ipv6  string
+			valid bool
+		}{
+			{"identical", "out.csv", "out.csv", false},
+			// Filesystem-dependent aliases are checked before preparing the writers.
+			{"dot", "out.csv", "./out.csv", true},
+			{"parent", "out.csv", "nested/../out.csv", true},
+			{"absolute", "out.csv", filepath.Join(dir, "out.csv"), true},
+			{"distinct", "ipv4.csv", "ipv6.csv", true},
+		} {
+			t.Run(format+"/"+tt.name, func(t *testing.T) {
+				content := fmt.Sprintf(`
+[output]
+format = %q
+ipv4_file = %q
+ipv6_file = %q
+[[databases]]
+name = "geo"
+path = "input.mmdb"
+[[columns]]
+name = "value"
+database = "geo"
+path = ["value"]
+`, format, tt.ipv4, tt.ipv6)
+				path := filepath.Join(t.TempDir(), "config.toml")
+				require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
+				_, err := LoadConfig(path)
+				if tt.valid {
+					require.NoError(t, err)
+				} else {
+					require.ErrorContains(
+						t,
+						err,
+						"output.ipv4_file and output.ipv6_file must refer to different paths",
+					)
+				}
+			})
+		}
 	}
 }
 

@@ -14,8 +14,8 @@ github.com/hexops/gotextdiff v1.0.3 h1:gitA9+qJrrTCsiCl7+kh75nPqQt1cx4ZkudSTLoUq
 github.com/hexops/gotextdiff v1.0.3/go.mod h1:pSWU5MAI3yDq+fZBTazCSJysOMbxWL1BSow5/V2vxeg=
 github.com/klauspost/compress v1.18.2 h1:iiPHWW0YrcFgpBYhsA6D1+fqHssJscY/Tm/y2Uqnapk=
 github.com/klauspost/compress v1.18.2/go.mod h1:R0h/fSBs8DE4ENlcrlib3PsXS61voFxhIs2DeRhCvJ4=
-github.com/maxmind/mmdbwriter/v2 v2.0.0-20260922152428-3aebce28ead6 h1:TmJET1fVtZZ6lpBMjddggO8fgl0JQRjhlfRf0/grsu0=
-github.com/maxmind/mmdbwriter/v2 v2.0.0-20260922152428-3aebce28ead6/go.mod h1:hPQyr0pfn16zAHNQsUS9w4SHjBZ/Y8+Jfmf04SS1K8A=
+github.com/maxmind/mmdbwriter/v2 v2.0.0-20260923191345-8f49d9bce747 h1:FSl/wHLKIt3uJhFl50atRbUhO0HjRtRGlaNq5YRM2wg=
+github.com/maxmind/mmdbwriter/v2 v2.0.0-20260923191345-8f49d9bce747/go.mod h1:hPQyr0pfn16zAHNQsUS9w4SHjBZ/Y8+Jfmf04SS1K8A=
 github.com/oschwald/maxminddb-golang/v2 v2.6.0 h1:pRlHCdJmc+4uxMOSthmKDt5HOw3JTX8TJZlhyP5ew0w=
 github.com/oschwald/maxminddb-golang/v2 v2.6.0/go.mod h1:sjqpB3z2BZrMduDp9TAUTCkZDoT3nDhixUc4Dge2qRQ=
 github.com/parquet-go/bitpack v1.0.0 h1:AUqzlKzPPXf2bCdjfj4sTeacrUwsT7NlcYDMUQxPcQA=
