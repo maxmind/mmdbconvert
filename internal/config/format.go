@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 
 	"github.com/pelletier/go-toml/v2"
@@ -58,7 +59,7 @@ func validateFormatKeys(data []byte) error {
 		return fmt.Errorf("decoding format options: %w", err)
 	}
 	for _, col := range raw.Columns {
-		for key := range col.Format {
+		for _, key := range slices.Sorted(maps.Keys(col.Format)) {
 			if !slices.Contains([]string{"precision", "true", "false"}, key) {
 				return fmt.Errorf("column '%s': unknown format option %q", col.Name, key)
 			}

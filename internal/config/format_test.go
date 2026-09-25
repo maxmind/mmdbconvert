@@ -128,6 +128,32 @@ path = ["value"]
 	}
 }
 
+func TestLoadConfig_UnknownFormatOptionOrder(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	content := `
+[output]
+format = "csv"
+file = "output"
+[[databases]]
+name = "geo"
+path = "input.mmdb"
+[[columns]]
+name = "value"
+database = "geo"
+path = ["value"]
+format = { width = 8, type = "float", precision = 4 }
+`
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
+	for range 32 {
+		_, err := LoadConfig(path)
+		require.EqualError(
+			t,
+			err,
+			`invalid configuration: column 'value': unknown format option "type"`,
+		)
+	}
+}
+
 func TestLoadConfig_ColumnNameBeforeFormat(t *testing.T) {
 	for _, name := range []string{"", `name = ""`} {
 		for _, format := range []string{
