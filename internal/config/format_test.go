@@ -115,7 +115,7 @@ path = ["value"]
 			cfg, err := LoadConfig(path)
 			if tt.err != "" {
 				require.ErrorContains(t, err, tt.err)
-				require.ErrorContains(t, err, "column 'value'")
+				require.ErrorContains(t, err, "invalid configuration: column 'value'")
 				return
 			}
 			require.NoError(t, err)
@@ -158,9 +158,13 @@ format = { width = 8 }
 `, name, format)
 				require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
 				_, err := LoadConfig(path)
-				require.ErrorContains(t, err, "column name is required")
-				require.NotContains(t, err.Error(), "column ''")
+				require.EqualError(t, err, "invalid configuration: column name is required")
 			})
 		}
 	}
+}
+
+func TestValidate_ColumnNameRequired(t *testing.T) {
+	err := validate(&Config{Columns: []Column{{}}}, nil)
+	require.EqualError(t, err, "column name is required")
 }
