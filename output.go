@@ -86,6 +86,8 @@ func prepareOutputPaths(paths []string) ([]outputDestination, error) {
 		dir, _ := filepath.Split(path)
 		if dir == "" {
 			dir = "."
+		} else if filepath.VolumeName(dir) == dir && !filepath.IsAbs(dir) {
+			dir += "."
 		}
 		destinations[i] = outputDestination{path: path, dir: dir, info: info}
 		if len(paths) == 2 {
