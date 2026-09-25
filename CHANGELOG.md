@@ -30,9 +30,10 @@ and this project adheres to
 - Output paths must be regular files or new files. Symlinks and special files,
   such as `/dev/stdout`, are no longer supported. Configure a symlink's target
   directly, and have streaming consumers read the completed output file.
-- Output files are now replaced, requiring write access to their directory.
-  Ownership, ACLs, and extended attributes are not preserved, and other hard
-  links retain the old data.
+- Output files are now replaced, requiring write access to their directory. On
+  Unix, replacement can overwrite a read-only file. Ownership, ACLs, and
+  extended attributes are not preserved, and other hard links retain the old
+  data.
 - Split IPv4/IPv6 outputs must refer to separate files. Filenames in the same
   directory must differ by more than letter case.
 

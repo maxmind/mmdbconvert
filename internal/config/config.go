@@ -188,21 +188,12 @@ func LoadConfig(path string) (*Config, error) {
 	if err := toml.Unmarshal(data, &config); err != nil {
 		return nil, fmt.Errorf("parsing TOML: %w", err)
 	}
-	// Check names first so format errors can identify their columns.
-	for _, col := range config.Columns {
-		if col.Name == "" {
-			return nil, errors.New("invalid configuration: column name is required")
-		}
-	}
-	if err := validateFormatKeys(data); err != nil {
-		return nil, fmt.Errorf("parsing column formats: %w", err)
-	}
 
 	// Apply defaults
 	applyDefaults(&config)
 
 	// Validate configuration
-	if err := validate(&config); err != nil {
+	if err := validate(&config, data); err != nil {
 		return nil, fmt.Errorf("invalid configuration: %w", err)
 	}
 
@@ -294,7 +285,17 @@ func applyDefaults(config *Config) {
 // validate performs comprehensive validation of the configuration.
 //
 //nolint:gocyclo // Configuration validation is inherently complex
-func validate(config *Config) error {
+func validate(config *Config, data []byte) error {
+	// Check names first so format errors can identify their columns.
+	for _, col := range config.Columns {
+		if col.Name == "" {
+			return errors.New("column name is required")
+		}
+	}
+	if err := validateFormatKeys(data); err != nil {
+		return err
+	}
+
 	// Validate output settings
 	if config.Output.Format == "" {
 		return errors.New("output.format is required")

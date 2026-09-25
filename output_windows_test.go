@@ -14,6 +14,29 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestPendingOutput_DriveRelativePath(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	drive := filepath.VolumeName(dir)
+	if len(drive) != 2 || drive[1] != ':' {
+		t.Skip("test requires a drive letter")
+	}
+	file, err := preparePendingOutput(drive + "out.csv")
+	require.NoError(t, err)
+	defer func() { require.NoError(t, file.Cleanup()) }()
+	parent, err := os.Stat(filepath.Dir(file.Name()))
+	require.NoError(t, err)
+	wantParent, err := os.Stat(dir)
+	require.NoError(t, err)
+	require.True(t, os.SameFile(parent, wantParent), "stage in the output directory")
+	_, err = file.WriteString("published")
+	require.NoError(t, err)
+	require.NoError(t, file.Commit())
+	path := filepath.Join(dir, "out.csv")
+	assertFileContent(t, path, "published")
+	assertOutputDirectory(t, []string{path})
+}
+
 func TestOutput_SubstDrive(t *testing.T) {
 	dir := t.TempDir()
 	var drive string
