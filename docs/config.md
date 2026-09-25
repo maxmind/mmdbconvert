@@ -23,6 +23,59 @@ database = "geo"
 path = ["country", "iso_code"]
 ```
 
+## Filesystem Path Parameters
+
+Use `${name}` in filesystem paths and supply values with repeatable
+`--var NAME=VALUE` flags. For example, `proxy.toml` can contain:
+
+```toml
+[output]
+format = "csv"
+ipv4_file = "${ipv4_csv}"
+ipv6_file = "${ipv6_csv}"
+
+[[databases]]
+name = "proxy"
+path = "${input_mmdb}"
+
+[[columns]]
+name = "is_residential_proxy"
+database = "proxy"
+path = ["is_residential_proxy"]
+```
+
+For this config, supply all three paths:
+
+```bash
+mmdbconvert --config proxy.toml \
+  --var input_mmdb=/build/unverified-proxy.mmdb \
+  --var ipv4_csv=/exports/Proxy-CSV_20260902/Blocks-IPv4.csv \
+  --var ipv6_csv=/exports/Proxy-CSV_20260902/Blocks-IPv6.csv
+```
+
+Parameters can be reused or embedded, as in `file = "${output_dir}/blocks.csv"`.
+
+- Only `databases[*].path`, `output.file`, `output.ipv4_file`, and
+  `output.ipv6_file` expand. All other fields and keys, including MMDB field
+  paths in `columns.path` and `columns.output_path`, remain literal.
+- Names are case-sensitive and match `[A-Za-z_][A-Za-z0-9_]*`. Arguments split
+  at the first `=`; repeated names use the last value. Empty values are allowed
+  if the resulting paths pass validation. Quote `NAME=VALUE` for your shell as
+  needed. Flags must precede a positional config path, or use `--config`.
+- Values are substituted once as literal text after TOML decoding, before
+  defaults and validation. There is no environment lookup or expression
+  evaluation; supplied values containing `${...}` are not expanded again.
+- Undefined references, malformed placeholders, and unused variables fail before
+  conversion I/O, with exit status 1. Malformed `--var` arguments exit 2.
+- `$${` escapes a placeholder opener: `$${name}` produces literal `${name}`.
+  This escape is required for literal `${...}` paths even without `--var`. Other
+  dollar signs, including `$name` and `$$`, stay literal.
+- Relative paths resolve against the working directory. Output directories must
+  already exist. The config filename and profiling paths are not expanded.
+
+Go callers supply the same names and values in `Options.Variables`, a
+`map[string]string`. `Run` leaves the map and config file unchanged.
+
 ## Configuration Sections
 
 ### General Settings

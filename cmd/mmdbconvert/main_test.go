@@ -352,6 +352,7 @@ func TestRunCLIHelpAndVersion(t *testing.T) {
 					assert.Empty(t, stdout.String())
 					assert.Contains(t, stderr.String(), "USAGE:")
 					assert.Contains(t, stderr.String(), "--log-format")
+					assert.Contains(t, stderr.String(), "--var <NAME=VALUE>")
 					assert.NotContains(t, stderr.String(), "level=")
 				}
 			})
