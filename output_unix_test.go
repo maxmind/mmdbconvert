@@ -17,9 +17,9 @@ import (
 
 func TestPendingOutput_Permissions(t *testing.T) {
 	for _, tt := range []struct {
-		name     string
-		existing bool
-	}{{"new", false}, {"existing", true}} {
+		name string
+		mode os.FileMode
+	}{{"new", 0}, {"existing", 0o640}, {"read-only", 0o444}} {
 		t.Run(tt.name, func(t *testing.T) {
 			dir := t.TempDir()
 			path := filepath.Join(dir, "output")
@@ -28,15 +28,18 @@ func TestPendingOutput_Permissions(t *testing.T) {
 			info, err := os.Stat(control)
 			require.NoError(t, err)
 			want := info.Mode().Perm()
-			if tt.existing {
-				require.NoError(t, os.WriteFile(path, nil, 0o600))
-				want = 0o640
+			if tt.mode != 0 {
+				require.NoError(t, os.WriteFile(path, []byte("previous output"), 0o600))
+				want = tt.mode
 				require.NoError(t, os.Chmod(path, want))
 			}
 			file, err := preparePendingOutput(path)
 			require.NoError(t, err)
 			defer func() { require.NoError(t, file.Cleanup()) }()
+			_, err = file.WriteString("new output")
+			require.NoError(t, err)
 			require.NoError(t, file.Commit())
+			assertFileContent(t, path, "new output")
 			info, err = os.Stat(path)
 			require.NoError(t, err)
 			require.Equal(t, want, info.Mode().Perm())
