@@ -3,72 +3,15 @@
 package mmdbconvert
 
 import (
-	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
-	"slices"
-	"strings"
-
-	"github.com/google/renameio/v2"
 )
 
-type pendingFile struct {
-	*renameio.PendingFile
-
-	path string
-}
-
-func newPendingOutput(destination outputDestination) (*pendingFile, error) {
-	return createPendingOutput(destination, restoreOutputPermissions)
-}
-
-func createPendingOutput(
-	destination outputDestination,
-	restorePermissions func(*os.File, os.FileMode) error,
-) (_ *pendingFile, retErr error) {
-	path, info := destination.path, destination.info
-	dir := destination.dir
-	// renameio joins (and cleans) the staging path. Resolve only directories
-	// containing "..", where cleaning before following symlinks changes meaning.
-	if slices.Contains(strings.Split(dir, string(filepath.Separator)), "..") {
-		var err error
-		dir, err = filepath.EvalSymlinks(dir)
-		if err != nil {
-			return nil, fmt.Errorf("resolving output directory for %s: %w", path, err)
-		}
+func outputFileMode(info os.FileInfo) os.FileMode {
+	if info != nil {
+		return info.Mode().Perm()
 	}
-	mode := os.FileMode(0o666)
-	preserveMode := info != nil && info.Mode().IsRegular()
-	if preserveMode {
-		mode = info.Mode().Perm()
-	}
-
-	// Restore permissions ourselves: WithExistingPermissions can leak the
-	// temporary file if chmod fails before it returns a handle.
-	file, err := renameio.NewPendingFile(path,
-		renameio.WithTempDir(dir),
-		renameio.WithPermissions(mode),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("creating pending output %s: %w", path, err)
-	}
-	defer func() {
-		if retErr != nil {
-			if err := file.Cleanup(); err != nil {
-				retErr = errors.Join(
-					retErr,
-					fmt.Errorf("cleaning up pending output %s: %w", path, err),
-				)
-			}
-		}
-	}()
-	if preserveMode {
-		if err := restorePermissions(file.File, mode); err != nil {
-			return nil, fmt.Errorf("restoring output permissions %s: %w", path, err)
-		}
-	}
-	return &pendingFile{PendingFile: file, path: path}, nil
+	return 0o666
 }
 
 func restoreOutputPermissions(file *os.File, mode os.FileMode) error {
@@ -80,13 +23,6 @@ func restoreOutputPermissions(file *os.File, mode os.FileMode) error {
 		if err := file.Chmod(mode); err != nil {
 			return fmt.Errorf("setting temporary file permissions: %w", err)
 		}
-	}
-	return nil
-}
-
-func (f *pendingFile) Commit() error {
-	if err := f.CloseAtomicallyReplace(); err != nil {
-		return fmt.Errorf("publishing output %s: %w", f.path, err)
 	}
 	return nil
 }

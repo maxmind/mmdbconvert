@@ -8,6 +8,7 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/maxmind/mmdbwriter/v2/mmdbtype"
@@ -314,6 +315,21 @@ func TestPendingOutput(t *testing.T) {
 			})
 		}
 	}
+}
+
+func TestPendingOutput_LongFilename(t *testing.T) {
+	path := filepath.Join(t.TempDir(), strings.Repeat("x", 250)+".csv")
+	require.NoError(t, os.WriteFile(path, []byte("previous output"), 0o600))
+	file, err := preparePendingOutput(path)
+	require.NoError(t, err)
+	defer func() { require.NoError(t, file.Cleanup()) }()
+	_, err = file.WriteString("new output")
+	require.NoError(t, err)
+	assertFileContent(t, path, "previous output")
+	require.NoError(t, file.Commit())
+	require.NoError(t, file.Cleanup())
+	assertFileContent(t, path, "new output")
+	assertOutputDirectory(t, []string{path})
 }
 
 func TestOutput_CommitFailure(t *testing.T) {

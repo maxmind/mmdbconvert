@@ -3,7 +3,6 @@ module github.com/maxmind/mmdbconvert
 go 1.27.0
 
 require (
-	github.com/google/renameio/v2 v2.0.0
 	github.com/maxmind/mmdbwriter/v2 v2.0.0-20260923191345-8f49d9bce747
 	github.com/oschwald/maxminddb-golang/v2 v2.6.0
 	github.com/parquet-go/parquet-go v0.32.0

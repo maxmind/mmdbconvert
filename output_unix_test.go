@@ -35,7 +35,7 @@ func TestPendingOutput_Permissions(t *testing.T) {
 			}
 			file, err := preparePendingOutput(path)
 			require.NoError(t, err)
-			defer file.Cleanup()
+			defer func() { require.NoError(t, file.Cleanup()) }()
 			require.NoError(t, file.Commit())
 			info, err = os.Stat(path)
 			require.NoError(t, err)
@@ -174,34 +174,6 @@ func TestRun_SplitParentAliases(t *testing.T) {
 			assertOutputDirectory(t, []string{paths[0], link, filepath.Join(dir, "other")})
 		})
 	}
-}
-
-func TestPendingOutput_PermissionFailureCleansUp(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "output")
-	require.NoError(t, os.WriteFile(path, []byte("previous output"), 0o600))
-	// #nosec G302 -- reproduce restoration of an existing file's 0666 permissions.
-	require.NoError(t, os.Chmod(path, 0o666))
-	var staged *os.File
-	var chmodErr error
-	destinations, err := prepareOutputPaths([]string{path})
-	require.NoError(t, err)
-	file, err := createPendingOutput(destinations[0], func(f *os.File, mode os.FileMode) error {
-		staged = f
-		require.Equal(t, os.FileMode(0o666), mode)
-		require.FileExists(t, f.Name())
-		chmodErr = &os.PathError{Op: "chmod", Path: f.Name(), Err: syscall.EPERM}
-		return chmodErr
-	})
-	require.Nil(t, file)
-	require.ErrorIs(t, err, chmodErr)
-	require.ErrorIs(t, err, syscall.EPERM)
-	require.ErrorContains(t, err, "restoring output permissions")
-	require.NotNil(t, staged)
-	_, err = staged.Stat()
-	require.ErrorIs(t, err, os.ErrClosed)
-	require.NoFileExists(t, staged.Name())
-	assertFileContent(t, path, "previous output")
-	assertOutputDirectory(t, []string{path})
 }
 
 func TestRestoreOutputPermissions(t *testing.T) {
