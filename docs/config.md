@@ -147,9 +147,10 @@ publication starts.
 Cancellation is cooperative: cleanup may wait for an operation already in
 progress. Once publication starts, it finishes before exiting.
 
-The CLI handles SIGINT and SIGTERM (plus SIGHUP on Unix) by canceling conversion
-and cleaning up temporary files. On Unix, inherited ignored SIGINT and SIGHUP
-stay ignored, preserving background-job and `nohup` behavior.
+On Unix and Windows, the CLI handles SIGINT and SIGTERM (plus SIGHUP on Unix) by
+canceling conversion and cleaning up temporary files. On Unix, inherited ignored
+SIGINT and SIGHUP stay ignored, preserving background-job and `nohup` behavior.
+Other platforms retain their native signal handling.
 
 After cleanup, the CLI re-raises the handled signal on Unix so an interrupt
 stops waiting shell loops, even if the output was published. If re-raising fails
