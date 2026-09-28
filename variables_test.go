@@ -50,12 +50,10 @@ path = ["value"]
 
 			switch format {
 			case "csv":
-				data, err := os.ReadFile(filepath.Clean(outputPath))
-				require.NoError(t, err)
-				assert.Equal(
+				assertFileContent(
 					t,
+					outputPath,
 					"network,value\n1.2.3.0/24,record\n2001:db8::/32,record\n",
-					string(data),
 				)
 			case "parquet":
 				type row struct {
@@ -108,12 +106,8 @@ path = ["value"]
 		ConfigPath: configPath,
 		Variables:  map[string]string{"input": relativeInput, "output_dir": "."},
 	}))
-	ipv4, err := os.ReadFile("v4.csv")
-	require.NoError(t, err)
-	assert.Equal(t, "network,value\n1.2.3.0/24,record\n", string(ipv4))
-	ipv6, err := os.ReadFile("v6.csv")
-	require.NoError(t, err)
-	assert.Equal(t, "network,value\n", string(ipv6))
+	assertFileContent(t, "v4.csv", "network,value\n1.2.3.0/24,record\n")
+	assertFileContent(t, "v6.csv", "network,value\n")
 	assert.NoFileExists(t, filepath.Join(filepath.Dir(configPath), "v4.csv"))
 }
 
@@ -170,9 +164,7 @@ path = %q
 				err,
 				"resolving path parameters: "+tt.errText,
 			)
-			data, err := os.ReadFile(filepath.Clean(outputPath))
-			require.NoError(t, err)
-			assert.Equal(t, "keep this output", string(data))
+			assertFileContent(t, outputPath, "keep this output")
 		})
 	}
 }

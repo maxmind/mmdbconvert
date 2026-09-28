@@ -167,7 +167,7 @@ path = "${input}"
 [[columns]]
 name = "${column}"
 database = "${source}"
-path = ["${lookup}", 0]
+path = ["${lookup}"]
 output_path = ["${destination}"]
 `)
 	cfg, err := LoadConfig(path, map[string]string{"input": "input.mmdb", "output": "out.mmdb"})
@@ -181,7 +181,7 @@ output_path = ["${destination}"]
 	assert.Equal(t, "${source}", cfg.Databases[0].Name)
 	assert.Equal(t, mmdbtype.String("${column}"), cfg.Columns[0].Name)
 	assert.Equal(t, "${source}", cfg.Columns[0].Database)
-	assert.Equal(t, Path{"${lookup}", int64(0)}, cfg.Columns[0].Path)
+	assert.Equal(t, Path{"${lookup}"}, cfg.Columns[0].Path)
 	assert.Equal(t, &Path{"${destination}"}, cfg.Columns[0].OutputPath)
 }
 
