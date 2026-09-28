@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"math"
 	"net/netip"
 	"testing"
 
@@ -530,6 +531,25 @@ func TestConvertToParquetType(t *testing.T) {
 				require.NoError(t, err)
 				assert.Equal(t, tt.expected, result)
 			}
+		})
+	}
+}
+
+func TestConvertToParquetType_Uint128FloatRounding(t *testing.T) {
+	for _, value := range []mmdbtype.Uint128{
+		{},
+		{Low: 42},
+		{Low: math.MaxUint64},
+		{High: 1},
+		{High: 1<<53 + 1, Low: 1 << 63},
+		{High: math.MaxUint64, Low: math.MaxUint64},
+	} {
+		t.Run(value.BigInt().String(), func(t *testing.T) {
+			want, _ := value.BigInt().Float64()
+			got, err := convertToParquetType(value, "float64")
+			require.NoError(t, err)
+			// Compare bits to catch one-ULP rounding differences.
+			require.Equal(t, math.Float64bits(want), math.Float64bits(got.(float64)))
 		})
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/csv"
 	"errors"
+	"math"
 	"math/big"
 	"net/netip"
 	"strconv"
@@ -601,6 +602,8 @@ func TestConvertToString(t *testing.T) {
 		{"uint32", mmdbtype.Uint32(42), "42"},
 		{"uint64", mmdbtype.Uint64(42), "42"},
 		{"uint128 zero", mmdbtype.Uint128{}, "0"},
+		{"uint128 low word", mmdbtype.Uint128{Low: 42}, "42"},
+		{"uint128 uint64 boundary", mmdbtype.Uint128{Low: math.MaxUint64}, "18446744073709551615"},
 		{"uint128 high word", mmdbtype.Uint128{High: 1, Low: 1}, "18446744073709551617"},
 		{"float64", mmdbtype.Float64(3.14), "3.14"},
 		{"bool true", mmdbtype.Bool(true), "1"},

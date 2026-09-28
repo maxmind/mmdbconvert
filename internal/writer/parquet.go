@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/netip"
 
 	"github.com/maxmind/mmdbwriter/v2/mmdbtype"
@@ -394,11 +395,10 @@ func convertToParquetType(value any, typeHint string) (any, error) {
 			}
 			return int64(v), nil
 		case mmdbtype.Uint128:
-			i := v.BigInt()
-			if !i.IsInt64() {
-				return nil, fmt.Errorf("uint128 value %s overflows int64", i.String())
+			if v.High != 0 || v.Low > math.MaxInt64 {
+				return nil, fmt.Errorf("uint128 value %s overflows int64", formatUint128(v))
 			}
-			return i.Int64(), nil
+			return int64(v.Low), nil
 		default:
 			return nil, fmt.Errorf("cannot convert %T to int64", value)
 		}
@@ -418,6 +418,10 @@ func convertToParquetType(value any, typeHint string) (any, error) {
 		case mmdbtype.Uint64:
 			return float64(v), nil
 		case mmdbtype.Uint128:
+			if v.High == 0 {
+				return float64(v.Low), nil
+			}
+			// Converting the two words separately can round twice.
 			i := v.BigInt()
 			f, _ := i.Float64()
 			return f, nil

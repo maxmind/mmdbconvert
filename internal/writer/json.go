@@ -23,7 +23,7 @@ type jsonContainer struct {
 func jsonValue(value mmdbtype.DataType, seen map[jsonContainer]any) any {
 	switch v := value.(type) {
 	case mmdbtype.Uint128:
-		return json.Number(v.BigInt().String())
+		return json.Number(formatUint128(v))
 	case mmdbtype.Map:
 		if v == nil {
 			return nil
