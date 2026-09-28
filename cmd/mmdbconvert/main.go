@@ -2,6 +2,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"fmt"
@@ -214,7 +215,7 @@ func run(opts mmdbconvert.Options, logger *slog.Logger) error {
 	logger.Info("Loading configuration")
 	logger.Info("Merging databases and writing output")
 
-	err := mmdbconvert.Run(opts)
+	err := mmdbconvert.Run(context.Background(), opts)
 	if err != nil {
 		return err
 	}

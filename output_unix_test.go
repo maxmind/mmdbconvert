@@ -160,7 +160,7 @@ func TestRun_SplitParentAliases(t *testing.T) {
 			require.NoError(t, err)
 			require.NoError(t, os.WriteFile(configPath, data, 0o600))
 			require.NoError(t, os.WriteFile(paths[0], []byte("previous output"), 0o600))
-			err = Run(Options{ConfigPath: configPath})
+			err = Run(t.Context(), Options{ConfigPath: configPath})
 			if !distinct {
 				require.ErrorContains(t, err, "ignoring case")
 				assertFileContent(t, paths[0], "previous output")

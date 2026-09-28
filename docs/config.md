@@ -139,6 +139,14 @@ Split IPv4/IPv6 files are replaced separately, so a failure can leave only one
 updated. Use a fresh output directory for each build if both files must be
 published together. Abrupt termination can leave temporary files behind.
 
+Go callers pass a context to `Run(ctx, opts)`, which does not install signal
+handlers. Use `context.Background()` when cancellation is not needed.
+Cancellation removes staged files and preserves existing outputs before
+publication starts.
+
+Cancellation is cooperative: cleanup may wait for an operation already in
+progress. Once publication starts, it finishes before exiting.
+
 #### CSV Options
 
 When `format = "csv"`, you can specify CSV-specific options:

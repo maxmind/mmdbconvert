@@ -44,7 +44,7 @@ path = ["country", "iso_code"]
 	err = os.WriteFile(configFile, []byte(configContent), 0o600)
 	require.NoError(t, err)
 
-	err = Run(Options{ConfigPath: configFile})
+	err = Run(t.Context(), Options{ConfigPath: configFile})
 	require.NoError(t, err)
 
 	// Verify output file was created
@@ -86,7 +86,7 @@ path = ["country", "iso_code"]
 	require.NoError(t, err)
 
 	// Run with DisableCache option
-	err = Run(Options{
+	err = Run(t.Context(), Options{
 		ConfigPath:   configFile,
 		DisableCache: true,
 	})
@@ -99,13 +99,13 @@ path = ["country", "iso_code"]
 }
 
 func TestRun_MissingConfigPath(t *testing.T) {
-	err := Run(Options{})
+	err := Run(t.Context(), Options{})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "config path is required")
 }
 
 func TestRun_NonexistentConfigFile(t *testing.T) {
-	err := Run(Options{ConfigPath: "/nonexistent/config.toml"})
+	err := Run(t.Context(), Options{ConfigPath: "/nonexistent/config.toml"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "loading config")
 }
@@ -117,7 +117,7 @@ func TestRun_InvalidConfig(t *testing.T) {
 	err := os.WriteFile(configFile, []byte("invalid toml [[["), 0o600)
 	require.NoError(t, err)
 
-	err = Run(Options{ConfigPath: configFile})
+	err = Run(t.Context(), Options{ConfigPath: configFile})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "loading config")
 }
@@ -144,7 +144,7 @@ path = ["country", "iso_code"]
 	err := os.WriteFile(configFile, []byte(configContent), 0o600)
 	require.NoError(t, err)
 
-	err = Run(Options{ConfigPath: configFile})
+	err = Run(t.Context(), Options{ConfigPath: configFile})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "opening databases")
 }
@@ -179,7 +179,7 @@ path = ["country", "iso_code"]
 	err = os.WriteFile(configFile, []byte(configContent), 0o600)
 	require.NoError(t, err)
 
-	err = Run(Options{ConfigPath: configFile})
+	err = Run(t.Context(), Options{ConfigPath: configFile})
 	require.NoError(t, err)
 
 	// Verify output file was created
@@ -216,7 +216,7 @@ path = ["country", "iso_code"]
 	err = os.WriteFile(configFile, []byte(configContent), 0o600)
 	require.NoError(t, err)
 
-	err = Run(Options{ConfigPath: configFile})
+	err = Run(t.Context(), Options{ConfigPath: configFile})
 	require.NoError(t, err)
 
 	// Verify both output files were created
@@ -339,7 +339,7 @@ path = [%q]
 `, outputPaths, csvConfig, tomlPath(databasePath), tt.field)
 					configFile := filepath.Join(tmpDir, "config.toml")
 					require.NoError(t, os.WriteFile(configFile, []byte(configContent), 0o600))
-					require.NoError(t, Run(Options{ConfigPath: configFile}))
+					require.NoError(t, Run(t.Context(), Options{ConfigPath: configFile}))
 
 					for name, want := range wantFiles {
 						content, err := os.ReadFile(filepath.Clean(filepath.Join(tmpDir, name)))

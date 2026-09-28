@@ -1,10 +1,16 @@
 package merger
 
 import (
+	"bytes"
+	"context"
 	"errors"
+	"fmt"
 	"net/netip"
+	"os"
+	"path/filepath"
 	"testing"
 
+	"github.com/maxmind/mmdbwriter/v2"
 	"github.com/maxmind/mmdbwriter/v2/mmdbtype"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -48,7 +54,7 @@ func TestMerger_SingleDatabase(t *testing.T) {
 	// Create merger and run
 	merger, err := NewMerger(readers, cfg, writer)
 	require.NoError(t, err)
-	err = merger.Merge()
+	err = merger.Merge(t.Context())
 	require.NoError(t, err)
 
 	// Should have written some rows
@@ -59,6 +65,61 @@ func TestMerger_SingleDatabase(t *testing.T) {
 		assert.Len(t, row.data, 1, "should have 1 column")
 		// country_code column should have data (not checking nil since some rows may not have it)
 	}
+}
+
+func TestMerger_Cancellation(t *testing.T) {
+	// An empty first database makes its entire address space one outer network,
+	// so the multi-database case must cancel within the nested City iteration.
+	empty, err := mmdbwriter.New(mmdbwriter.Options{IPVersion: 6, IncludeReservedNetworks: true})
+	require.NoError(t, err)
+	var buf bytes.Buffer
+	_, err = empty.WriteTo(&buf)
+	require.NoError(t, err)
+	emptyPath := filepath.Join(t.TempDir(), "empty.mmdb")
+	require.NoError(t, os.WriteFile(emptyPath, buf.Bytes(), 0o600))
+	for _, multiple := range []bool{false, true} {
+		t.Run(fmt.Sprintf("multiple=%t", multiple), func(t *testing.T) {
+			readers, err := mmdb.OpenDatabases(
+				map[string]string{"city": cityTestDB, "empty": emptyPath},
+			)
+			require.NoError(t, err)
+			defer readers.Close()
+			cfg := &config.Config{Columns: []config.Column{
+				{Name: "country", Database: "city", Path: config.Path{"country", "iso_code"}},
+			}}
+			if multiple {
+				cfg.Columns = append([]config.Column{{
+					Name: "empty", Database: "empty", Path: config.Path{"value"},
+				}}, cfg.Columns...)
+			}
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			writer := &cancelWriter{cancel: cancel}
+			m, err := NewMerger(readers, cfg, writer)
+			require.NoError(t, err)
+			require.ErrorIs(t, m.Merge(ctx), context.Canceled)
+			require.Equal(t, 1, writer.rows, "merging must stop before writing another range")
+		})
+	}
+}
+
+type cancelWriter struct {
+	cancel context.CancelFunc
+	rows   int
+}
+
+var _ RangeRowWriter = (*cancelWriter)(nil)
+
+func (w *cancelWriter) WriteRow(netip.Prefix, []mmdbtype.DataType) error {
+	w.rows++
+	w.cancel()
+	return nil
+}
+
+func (w *cancelWriter) WriteRange(netip.Addr, netip.Addr, []mmdbtype.DataType) error {
+	w.rows++
+	w.cancel()
+	return nil
 }
 
 func TestSimpleReaderIteration(t *testing.T) {
@@ -113,7 +174,7 @@ func TestMerger_MultipleDatabases(t *testing.T) {
 	// Create merger and run
 	merger, err := NewMerger(readers, cfg, writer)
 	require.NoError(t, err)
-	err = merger.Merge()
+	err = merger.Merge(t.Context())
 	require.NoError(t, err)
 
 	// Should have written some rows
@@ -164,7 +225,7 @@ func TestMerger_EmitsNetworksPresentOnlyInLaterDatabase(t *testing.T) {
 	merger, err := NewMerger(readers, cfg, writer)
 	require.NoError(t, err)
 
-	err = merger.Merge()
+	err = merger.Merge(t.Context())
 	require.ErrorIs(t, err, errStopIteration)
 	assert.True(t, writer.found, "expected to detect coverage for 214.0.0.1")
 }
@@ -202,7 +263,7 @@ func TestMerger_AdjacentNetworkMerging(t *testing.T) {
 	// Create merger and run
 	merger, err := NewMerger(readers, cfg, writer)
 	require.NoError(t, err)
-	err = merger.Merge()
+	err = merger.Merge(t.Context())
 	require.NoError(t, err)
 
 	// The merger should have consolidated some networks
@@ -325,7 +386,7 @@ func TestMerger_NilValues(t *testing.T) {
 
 	merger, err := NewMerger(readers, cfg, writer)
 	require.NoError(t, err)
-	err = merger.Merge()
+	err = merger.Merge(t.Context())
 	require.NoError(t, err)
 
 	// Should have some rows
@@ -418,7 +479,7 @@ func TestMerger_ResultAlignment(t *testing.T) {
 	assert.Equal(t, 0, merger.extractors[0].dbIndex, "city column should map to index 0")
 	assert.Equal(t, 1, merger.extractors[1].dbIndex, "anon column should map to index 1")
 
-	err = merger.Merge()
+	err = merger.Merge(t.Context())
 	require.NoError(t, err)
 
 	// Should have successfully merged data from both databases
@@ -449,7 +510,7 @@ func TestMerger_BroaderDatabase(t *testing.T) {
 	merger, err := NewMerger(readers, cfg, writer)
 	require.NoError(t, err)
 
-	err = merger.Merge()
+	err = merger.Merge(t.Context())
 	require.NoError(t, err)
 
 	// Verify we got results and they contain data from both databases
@@ -495,7 +556,7 @@ func TestMerger_MissingData(t *testing.T) {
 	merger, err := NewMerger(readers, cfg, writer)
 	require.NoError(t, err)
 
-	err = merger.Merge()
+	err = merger.Merge(t.Context())
 	require.NoError(t, err)
 
 	// Should have rows
@@ -562,7 +623,7 @@ func TestMerger_NoRedundantLookups(t *testing.T) {
 	assert.Equal(t, 1, merger.extractors[3].dbIndex, "anon column should map to index 1")
 
 	// Run the merge
-	err = merger.Merge()
+	err = merger.Merge(t.Context())
 	require.NoError(t, err)
 
 	// Verify we got results with data from multiple columns

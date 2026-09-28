@@ -24,7 +24,7 @@ func TestRun_CityCSVParity(t *testing.T) {
 	require.NoError(t, err)
 	configPath := filepath.Join(t.TempDir(), "city.toml")
 	require.NoError(t, os.WriteFile(configPath, data, 0o600))
-	require.NoError(t, Run(Options{ConfigPath: configPath}))
+	require.NoError(t, Run(t.Context(), Options{ConfigPath: configPath}))
 
 	for _, tt := range []struct {
 		version       string
