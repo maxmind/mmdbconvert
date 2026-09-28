@@ -422,8 +422,8 @@ func convertToString(value any) (string, error) {
 		return strconv.FormatUint(uint64(v), 10), nil
 	case mmdbtype.Uint64:
 		return strconv.FormatUint(uint64(v), 10), nil
-	case *mmdbtype.Uint128:
-		return (*big.Int)(v).String(), nil
+	case mmdbtype.Uint128:
+		return v.BigInt().String(), nil
 	case mmdbtype.Float32:
 		return strconv.FormatFloat(float64(v), 'g', -1, 32), nil
 	case mmdbtype.Float64:

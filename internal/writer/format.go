@@ -71,7 +71,7 @@ func mmdbTypeName(value mmdbtype.DataType) string {
 		return "uint32"
 	case mmdbtype.Uint64:
 		return "uint64"
-	case *mmdbtype.Uint128:
+	case mmdbtype.Uint128:
 		return "uint128"
 	default:
 		return "unknown"

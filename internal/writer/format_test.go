@@ -5,7 +5,6 @@ import (
 	"encoding/csv"
 	"fmt"
 	"math"
-	"math/big"
 	"net/netip"
 	"testing"
 
@@ -154,7 +153,7 @@ func TestCSVWriter_FormatTypeMismatch(t *testing.T) {
 				{mmdbtype.Uint16(1), "uint16"},
 				{mmdbtype.Uint32(1), "uint32"},
 				{mmdbtype.Uint64(1), "uint64"},
-				{(*mmdbtype.Uint128)(big.NewInt(1)), "uint128"},
+				{mmdbtype.Uint128{Low: 1}, "uint128"},
 				{mmdbtype.String("1.2"), "string"},
 				{mmdbtype.Map{"value": mmdbtype.Float64(1.2)}, "map"},
 				{mmdbtype.Slice{mmdbtype.Float64(1.2)}, "array"},
