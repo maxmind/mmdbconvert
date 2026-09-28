@@ -176,8 +176,9 @@ func (p *Path) Segments() []any {
 	return segments
 }
 
-// LoadConfig loads and parses a TOML configuration file.
-func LoadConfig(path string) (*Config, error) {
+// LoadConfig parses a TOML configuration file and resolves its filesystem path
+// parameters before applying defaults and validating the configuration.
+func LoadConfig(path string, variables map[string]string) (*Config, error) {
 	// #nosec G304 -- path is a user-provided config file path, which is intentional
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -187,6 +188,10 @@ func LoadConfig(path string) (*Config, error) {
 	var config Config
 	if err := toml.Unmarshal(data, &config); err != nil {
 		return nil, fmt.Errorf("parsing TOML: %w", err)
+	}
+
+	if err := resolvePaths(&config, variables); err != nil {
+		return nil, fmt.Errorf("resolving path parameters: %w", err)
 	}
 
 	// Apply defaults

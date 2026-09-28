@@ -521,7 +521,7 @@ path = ["country", "iso_code"]
 			}
 
 			// Load and validate config
-			cfg, err := LoadConfig(configPath)
+			cfg, err := LoadConfig(configPath, nil)
 			if err != nil {
 				t.Fatalf("LoadConfig failed: %v", err)
 			}
@@ -553,7 +553,7 @@ path = ["country", "iso_code"]
 	path := filepath.Join(tmp, "config.toml")
 	require.NoError(t, os.WriteFile(path, []byte(toml), 0o644))
 
-	_, err := LoadConfig(path)
+	_, err := LoadConfig(path, nil)
 	if err == nil || !strings.Contains(err.Error(), "cannot be used together") {
 		t.Fatalf("expected error about mutually exclusive files, got %v", err)
 	}
@@ -579,7 +579,7 @@ path = ["country", "iso_code"]
 	path := filepath.Join(tmp, "config.toml")
 	require.NoError(t, os.WriteFile(path, []byte(toml), 0o644))
 
-	_, err := LoadConfig(path)
+	_, err := LoadConfig(path, nil)
 	if err == nil || !strings.Contains(err.Error(), "either output.file must be set") {
 		t.Fatalf("expected error about providing both ipv4 and ipv6 files, got %v", err)
 	}
@@ -618,7 +618,7 @@ path = ["value"]
 `, format, tt.ipv4, tt.ipv6)
 				path := filepath.Join(t.TempDir(), "config.toml")
 				require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
-				_, err := LoadConfig(path)
+				_, err := LoadConfig(path, nil)
 				if tt.valid {
 					require.NoError(t, err)
 				} else {
@@ -1189,7 +1189,7 @@ path = ["country", "iso_code"]
 			}
 
 			// Load config should fail
-			_, err := LoadConfig(configPath)
+			_, err := LoadConfig(configPath, nil)
 			if err == nil {
 				t.Fatal("expected error, got nil")
 			}

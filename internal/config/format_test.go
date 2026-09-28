@@ -112,7 +112,7 @@ path = ["value"]
 %s
 `, tt.output, tt.format)
 			require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
-			cfg, err := LoadConfig(path)
+			cfg, err := LoadConfig(path, nil)
 			if tt.err != "" {
 				require.ErrorContains(t, err, tt.err)
 				require.ErrorContains(t, err, "invalid configuration: column 'value'")
@@ -145,7 +145,7 @@ format = { width = 8, type = "float", precision = 4 }
 `
 	require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
 	for range 32 {
-		_, err := LoadConfig(path)
+		_, err := LoadConfig(path, nil)
 		require.EqualError(
 			t,
 			err,
@@ -183,7 +183,7 @@ path = ["value"]
 format = { width = 8 }
 `, name, format)
 				require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
-				_, err := LoadConfig(path)
+				_, err := LoadConfig(path, nil)
 				require.EqualError(t, err, "invalid configuration: column name is required")
 			})
 		}

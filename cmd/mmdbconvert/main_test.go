@@ -169,6 +169,21 @@ func TestRunCLIArgumentErrors(t *testing.T) {
 		{
 			name:    "flag after positional path",
 			args:    []string{configPath, "--quiet"},
+			message: "Flags must precede a positional config path; use --config to specify the path alongside flags",
+		},
+		{
+			name:    "parameter after positional path",
+			args:    []string{configPath, "--var", "input=value"},
+			message: "Flags must precede a positional config path; use --config to specify the path alongside flags",
+		},
+		{
+			name:    "parameter assignment after positional path",
+			args:    []string{configPath, "--var=input=value"},
+			message: "Flags must precede a positional config path; use --config to specify the path alongside flags",
+		},
+		{
+			name:    "single dash is a positional argument",
+			args:    []string{configPath, "-"},
 			message: "Only one config file path may be specified",
 		},
 		{
@@ -352,6 +367,7 @@ func TestRunCLIHelpAndVersion(t *testing.T) {
 					assert.Empty(t, stdout.String())
 					assert.Contains(t, stderr.String(), "USAGE:")
 					assert.Contains(t, stderr.String(), "--log-format")
+					assert.Contains(t, stderr.String(), "--var <NAME=VALUE>")
 					assert.NotContains(t, stderr.String(), "level=")
 				}
 			})

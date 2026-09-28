@@ -503,7 +503,7 @@ output_path = ["country_code"]
 `, format, output, tomlPath(filepath.Join(testDataDir, "GeoIP2-City-Test.mmdb")), columnPath)
 	configPath := filepath.Join(t.TempDir(), "config.toml")
 	require.NoError(t, os.WriteFile(configPath, []byte(content), 0o600))
-	cfg, err := config.LoadConfig(configPath)
+	cfg, err := config.LoadConfig(configPath, nil)
 	require.NoError(t, err)
 	return configPath, cfg, paths
 }
