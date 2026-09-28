@@ -22,8 +22,8 @@ and this project adheres to
 ### Changed
 
 - Filesystem paths now interpret `${name}` as a parameter, even when no
-  variables are supplied. Undefined parameters are errors; use `$${name}` for a
-  literal `${name}` in a path.
+  variables are supplied. Undefined parameters and malformed placeholders are
+  errors; escape a literal `${` as `$${`.
 - Updated to mmdbwriter/v2 for faster MMDB output with lower memory usage.
 - Go 1.27 or later is now required to build from source.
 - Progress output now goes to stderr alongside errors and uses structured

@@ -70,7 +70,8 @@ Parameters can be reused or embedded, as in `file = "${output_dir}/blocks.csv"`.
   status 1. Malformed `--var` arguments exit 2.
 - `$${` escapes a placeholder opener: `$${name}` produces literal `${name}`.
   This escape is required for literal `${...}` paths even without `--var`. Other
-  dollar signs, including `$name` and `$$`, stay literal.
+  dollar signs, including `$name` and `$$`, stay literal. To put `$` immediately
+  before an expanded value, include it in a supplied value.
 - Relative paths resolve against the working directory. Output directories must
   already exist. The config filename and profiling paths are not expanded.
 
