@@ -431,13 +431,13 @@ func convertToString(value any) (string, error) {
 	case mmdbtype.Bytes:
 		return hex.EncodeToString([]byte(v)), nil
 	case mmdbtype.Map:
-		b, err := json.Marshal(v)
+		b, err := json.Marshal(normalizeMMDBJSON(v))
 		if err != nil {
 			return "", fmt.Errorf("marshaling map to JSON: %w", err)
 		}
 		return string(b), nil
 	case mmdbtype.Slice:
-		b, err := json.Marshal(v)
+		b, err := json.Marshal(normalizeMMDBJSON(v))
 		if err != nil {
 			return "", fmt.Errorf("marshaling slice to JSON: %w", err)
 		}
