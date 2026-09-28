@@ -41,8 +41,8 @@ func TestExpandPath(t *testing.T) {
 			variables: map[string]string{"name": "a", "NAME": "b", "_name2": "c"}, want: "a/b/c",
 		},
 		{
-			name: "empty value", path: "${prefix}blocks.csv",
-			variables: map[string]string{"prefix": ""}, want: "blocks.csv",
+			name: "whitespace value", path: "${prefix}blocks.csv",
+			variables: map[string]string{"prefix": " "}, want: " blocks.csv",
 		},
 		{
 			name: "literal value",
@@ -234,23 +234,38 @@ func TestLoadConfig_PathVariableErrors(t *testing.T) {
 		},
 		{
 			name: "invalid API name", variables: map[string]string{"bad-name": "value"},
-			errText: `invalid variable name "bad-name"`,
+			errText: `variables: invalid variable name "bad-name"`,
 		},
 		{
 			name: "empty API name", variables: map[string]string{"": "value"},
-			errText: `invalid variable name ""`,
+			errText: `variables: invalid variable name ""`,
 		},
 		{
 			name: "deterministic error", variables: map[string]string{"z": "value", "a": "value"},
 			errText: `unused variable "a"`,
 		},
 		{
-			name:   "empty output is validated",
-			config: "[output]\nformat = 'csv'\nfile = '${output}'",
-			variables: map[string]string{
-				"output": "",
-			},
-			errText: "invalid configuration: either output.file",
+			name:      "empty output",
+			config:    "[output]\nformat = 'csv'\nfile = '${output}'",
+			variables: map[string]string{"output": ""},
+			errText:   `variables: empty value for variable "output"`,
+		},
+		{
+			name:      "empty input",
+			config:    "[[databases]]\nname = 'proxy'\npath = '${input}'",
+			variables: map[string]string{"input": ""},
+			errText:   `variables: empty value for variable "input"`,
+		},
+		{
+			name:      "empty directory",
+			config:    "[output]\nfile = '${output_dir}/blocks.csv'",
+			variables: map[string]string{"output_dir": ""},
+			errText:   `variables: empty value for variable "output_dir"`,
+		},
+		{
+			name:      "unused empty value",
+			variables: map[string]string{"unused": ""},
+			errText:   `variables: empty value for variable "unused"`,
 		},
 	}
 	for _, tt := range tests {

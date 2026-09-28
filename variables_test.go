@@ -91,8 +91,8 @@ func TestRun_PathVariablesRelativeToWorkingDirectory(t *testing.T) {
 	content := `
 [output]
 format = "csv"
-ipv4_file = "${prefix}v4.csv"
-ipv6_file = "${prefix}v6.csv"
+ipv4_file = "${output_dir}/v4.csv"
+ipv6_file = "${output_dir}/v6.csv"
 
 [[databases]]
 name = "source"
@@ -106,7 +106,7 @@ path = ["value"]
 	require.NoError(t, os.WriteFile(configPath, []byte(content), 0o600))
 	require.NoError(t, Run(Options{
 		ConfigPath: configPath,
-		Variables:  map[string]string{"input": relativeInput, "prefix": ""},
+		Variables:  map[string]string{"input": relativeInput, "output_dir": "."},
 	}))
 	ipv4, err := os.ReadFile("v4.csv")
 	require.NoError(t, err)
@@ -118,8 +118,31 @@ path = ["value"]
 }
 
 func TestRun_PathVariableErrorsPreserveOutputs(t *testing.T) {
-	for _, badInput := range []string{"${missing}", "${unterminated", "${bad-name}"} {
-		t.Run(badInput, func(t *testing.T) {
+	tests := []struct {
+		input     string
+		variables map[string]string
+		errText   string
+	}{
+		{
+			input:   "${missing}",
+			errText: `databases[1].path (name "second"): undefined variable "missing"`,
+		},
+		{
+			input:   "${unterminated",
+			errText: `databases[1].path (name "second"): unterminated variable placeholder`,
+		},
+		{
+			input:   "${bad-name}",
+			errText: `databases[1].path (name "second"): invalid variable name "bad-name"`,
+		},
+		{
+			input:     "${empty}input.mmdb",
+			variables: map[string]string{"empty": ""},
+			errText:   `variables: empty value for variable "empty"`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
 			outputPath := filepath.Join(t.TempDir(), "existing.csv")
 			require.NoError(t, os.WriteFile(outputPath, []byte("keep this output"), 0o600))
 			configPath := filepath.Join(t.TempDir(), "config.toml")
@@ -135,15 +158,17 @@ path = "nonexistent.mmdb"
 [[databases]]
 name = "second"
 path = %q
-`, badInput)
+`, tt.input)
 			require.NoError(t, os.WriteFile(configPath, []byte(content), 0o600))
+			variables := map[string]string{"output": outputPath}
+			maps.Copy(variables, tt.variables)
 			err := Run(
-				Options{ConfigPath: configPath, Variables: map[string]string{"output": outputPath}},
+				Options{ConfigPath: configPath, Variables: variables},
 			)
 			require.ErrorContains(
 				t,
 				err,
-				`resolving path parameters: databases[1].path (name "second")`,
+				"resolving path parameters: "+tt.errText,
 			)
 			data, err := os.ReadFile(filepath.Clean(outputPath))
 			require.NoError(t, err)

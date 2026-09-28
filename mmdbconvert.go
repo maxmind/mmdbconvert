@@ -17,9 +17,10 @@ type Options struct {
 	ConfigPath string
 
 	// Variables supplies literal values for ${name} parameters in database and
-	// output filesystem paths. Names must match [A-Za-z_][A-Za-z0-9_]*. Undefined
-	// references and unused variables are errors. Values are not expanded again,
-	// and Run does not modify this map. Use $${name} in a path for literal ${name}.
+	// output filesystem paths. Names must match [A-Za-z_][A-Za-z0-9_]* and values
+	// must be nonempty. Undefined references and unused variables are errors.
+	// Values are not expanded again, and Run does not modify this map. Use
+	// $${name} in a path for literal ${name}.
 	Variables map[string]string
 
 	// DisableCache disables MMDB unmarshaler caching to reduce memory usage.

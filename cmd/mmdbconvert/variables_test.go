@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -23,11 +24,10 @@ func TestRunCLIPathVariables(t *testing.T) {
 			ipv6 := filepath.Join(outputDir, "IPv6.csv")
 			args := []string{
 				"--quiet",
-				"--var", "input=wrong.mmdb",
+				"--var", "input=",
 				"--var=input=" + testDatabasePath(t),
 				"--var", "ipv4=" + ipv4,
 				"--var", "ipv6=" + ipv6,
-				"--var", "prefix=",
 			}
 			if positional {
 				args = append(args, configPath)
@@ -58,7 +58,6 @@ func TestRunCLIPathVariableErrors(t *testing.T) {
 		"--var", "input=" + testDatabasePath(t),
 		"--var", "ipv4=" + ipv4,
 		"--var", "ipv6=" + ipv6,
-		"--var", "prefix=",
 	}
 	tests := []struct {
 		name    string
@@ -100,7 +99,13 @@ func TestRunCLIPathVariableErrors(t *testing.T) {
 			name:    "empty input",
 			args:    []string{"--var", "input="},
 			code:    1,
-			errText: "database path is required",
+			errText: `variables: empty value for variable "input"`,
+		},
+		{
+			name:    "empty output",
+			args:    []string{"--var", "ipv4="},
+			code:    1,
+			errText: `variables: empty value for variable "ipv4"`,
 		},
 	}
 	for _, format := range []string{"json", "text"} {
@@ -118,6 +123,8 @@ func TestRunCLIPathVariableErrors(t *testing.T) {
 					assert.NotContains(t, stderr.String(), "USAGE:")
 				} else {
 					assert.Contains(t, stderr.String(), "level=ERROR")
+					quoted := strconv.Quote(tt.errText)
+					assert.Contains(t, stderr.String(), quoted[1:len(quoted)-1])
 					if tt.code == 2 {
 						assert.Contains(t, stderr.String(), "USAGE:")
 					} else {
@@ -139,7 +146,7 @@ func TestRunCLIPathVariablesRequired(t *testing.T) {
 	assert.Equal(t, 1, runCLI(args, &stdout, &stderr, false))
 	records := decodeLogRecords(t, stderr.String())
 	require.Len(t, records, 1)
-	assert.Contains(t, records[0]["error"], `output.ipv4_file: undefined variable "prefix"`)
+	assert.Contains(t, records[0]["error"], `output.ipv4_file: undefined variable "ipv4"`)
 }
 
 func writePathVariableConfig(t *testing.T) string {
@@ -148,8 +155,8 @@ func writePathVariableConfig(t *testing.T) string {
 	content := `
 [output]
 format = "csv"
-ipv4_file = "${prefix}${ipv4}"
-ipv6_file = "${prefix}${ipv6}"
+ipv4_file = "${ipv4}"
+ipv6_file = "${ipv6}"
 
 [[databases]]
 name = "city"

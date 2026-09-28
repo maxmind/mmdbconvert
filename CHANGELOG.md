@@ -12,6 +12,7 @@ and this project adheres to
 
 - Runtime parameters in database and output file paths using `${name}`, supplied
   through repeatable `--var NAME=VALUE` flags or Go's `Options.Variables`.
+  Parameter values must be nonempty.
 - Structured JSON diagnostics when stderr is not a terminal, with text
   diagnostics at a terminal. The new `--log-format=auto|json|text` flag can
   override automatic selection. JSON records use `time`, `level`, and `message`

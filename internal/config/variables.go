@@ -24,7 +24,10 @@ func resolvePaths(cfg *Config, variables map[string]string) error {
 	names := slices.Sorted(maps.Keys(variables))
 	for _, name := range names {
 		if err := ValidateVariableName(name); err != nil {
-			return err
+			return fmt.Errorf("variables: %w", err)
+		}
+		if variables[name] == "" {
+			return fmt.Errorf("variables: empty value for variable %q", name)
 		}
 	}
 

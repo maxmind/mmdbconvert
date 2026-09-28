@@ -59,14 +59,15 @@ Parameters can be reused or embedded, as in `file = "${output_dir}/blocks.csv"`.
   `output.ipv6_file` expand. All other fields and keys, including MMDB field
   paths in `columns.path` and `columns.output_path`, remain literal.
 - Names are case-sensitive and match `[A-Za-z_][A-Za-z0-9_]*`. Arguments split
-  at the first `=`; repeated names use the last value. Empty values are allowed
-  if the resulting paths pass validation. Quote `NAME=VALUE` for your shell as
+  at the first `=`; repeated names use the last value, which must be nonempty.
+  Use `.` for the current directory. Quote `NAME=VALUE` for your shell as
   needed. Flags must precede a positional config path, or use `--config`.
 - Values are substituted once as literal text after TOML decoding, before
   defaults and validation. There is no environment lookup or expression
   evaluation; supplied values containing `${...}` are not expanded again.
-- Undefined references, malformed placeholders, and unused variables fail before
-  conversion I/O, with exit status 1. Malformed `--var` arguments exit 2.
+- Empty values, undefined references, malformed placeholders, and unused
+  variables fail before opening database inputs or conversion outputs, with exit
+  status 1. Malformed `--var` arguments exit 2.
 - `$${` escapes a placeholder opener: `$${name}` produces literal `${name}`.
   This escape is required for literal `${...}` paths even without `--var`. Other
   dollar signs, including `$name` and `$$`, stay literal.

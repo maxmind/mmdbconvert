@@ -268,8 +268,9 @@ EXAMPLES:
 CONFIGURATION:
     Filesystem paths support ${name} parameters supplied with --var. Use $${name}
     for literal ${name}. Values are substituted once, without environment lookup.
-    Undefined references and unused variables are errors. Relative paths resolve
-    against the working directory. Put flags before a positional config path.
+    Values must be nonempty. Undefined references and unused variables are errors.
+    Relative paths resolve against the working directory. Put flags before a
+    positional config path.
     See docs/config.md for configuration file format and options.
 
 MORE INFORMATION:
