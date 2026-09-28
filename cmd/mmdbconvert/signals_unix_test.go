@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -15,56 +16,151 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestCLISignals(t *testing.T) {
-	for _, sig := range []os.Signal{os.Interrupt, syscall.SIGTERM, syscall.SIGHUP} {
-		for _, completed := range []bool{false, true} {
-			t.Run(fmt.Sprintf("%s/completed=%t", sig, completed), func(t *testing.T) {
-				skipIgnoredSignal(t, sig)
-				ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-				defer cancel()
-				binary, err := os.Executable()
-				require.NoError(t, err)
-				// #nosec G204 -- run only this test binary's synchronized signal helper.
-				cmd := exec.CommandContext(ctx, binary, "-test.run=^TestCLISignalHelper$")
-				cmd.Env = append(os.Environ(), "MMDBCONVERT_SIGNAL_TEST_HELPER=1")
-				if !completed {
-					cmd.Env = append(cmd.Env, "MMDBCONVERT_SIGNAL_TEST_FAILED=1")
-				}
-				var stderr bytes.Buffer
-				cmd.Stderr = &stderr
-				stdout, err := cmd.StdoutPipe()
-				require.NoError(t, err)
-				require.NoError(t, cmd.Start())
-				// The child announces readiness only after signal handling is installed.
-				line, err := bufio.NewReader(stdout).ReadString('\n')
-				require.NoError(t, err)
-				require.Equal(t, "ready\n", line)
-				require.NoError(t, cmd.Process.Signal(sig))
-				err = cmd.Wait()
-				var exitErr *exec.ExitError
-				require.ErrorAs(t, err, &exitErr, stderr.String())
-				status := exitErr.Sys().(syscall.WaitStatus)
-				require.True(t, status.Signaled(), stderr.String())
-				require.Equal(t, sig, status.Signal())
-				require.Contains(t, stderr.String(), sig.String()+" signal received")
-				require.NoError(t, ctx.Err(), "child should exit through cancellation, not timeout")
-				require.Contains(t, stderr.String(), "cleanup complete")
-				records := decodeLogRecords(t, stderr.String())
-				require.Len(t, records, 2)
-				warning := records[1]
-				message := "Signal received"
-				if completed {
-					message = "Signal received; conversion completed and outputs were published"
-				}
-				require.Equal(t, message, warning["message"])
-				require.Contains(t, warning["error"], sig.String()+" signal received")
-				require.NotContains(t, warning, "cause")
+	for _, tt := range []struct {
+		name      string
+		first     os.Signal
+		second    os.Signal
+		completed bool
+	}{
+		{name: "interrupt", first: os.Interrupt},
+		{name: "terminated", first: syscall.SIGTERM},
+		{name: "hangup", first: syscall.SIGHUP},
+		{name: "interrupt with publication", first: os.Interrupt, completed: true},
+		{name: "terminated with publication", first: syscall.SIGTERM, completed: true},
+		{name: "hangup with publication", first: syscall.SIGHUP, completed: true},
+		{name: "interrupt twice", first: os.Interrupt, second: os.Interrupt},
+		{name: "terminated twice", first: syscall.SIGTERM, second: syscall.SIGTERM},
+		{name: "hangup twice", first: syscall.SIGHUP, second: syscall.SIGHUP},
+		{name: "interrupt then terminate", first: os.Interrupt, second: syscall.SIGTERM},
+		{name: "terminate then interrupt", first: syscall.SIGTERM, second: os.Interrupt},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			skipIgnoredSignal(t, tt.first)
+			if tt.second != nil {
+				skipIgnoredSignal(t, tt.second)
+			}
+			child := startSignalChild(t, signalChildOptions{
+				blockCleanup: tt.second != nil,
+				completed:    tt.completed,
 			})
-		}
+			require.NoError(t, child.cmd.Process.Signal(tt.first))
+			last := tt.first
+			if tt.second != nil {
+				child.requireStage(t, "canceled")
+				require.NoError(t, child.cmd.Process.Signal(tt.second))
+				last = tt.second
+			}
+			status, stderr := child.wait(t)
+			require.Equal(t, last, status.Signal())
+			if tt.second != nil {
+				require.NotContains(t, stderr, "cleanup complete")
+				return
+			}
+			require.Contains(t, stderr, "cleanup complete")
+			records := decodeLogRecords(t, stderr)
+			require.Len(t, records, 2)
+			warning := records[1]
+			message := "Signal received"
+			if tt.completed {
+				message = "Signal received; conversion completed and outputs were published"
+			}
+			require.Equal(t, message, warning["message"])
+			require.Contains(t, warning["error"], tt.first.String()+" signal received")
+			require.NotContains(t, warning, "cause")
+		})
 	}
+}
+
+type signalChildOptions struct {
+	blockCleanup bool
+	shellLoop    bool
+	completed    bool
+}
+
+type signalChild struct {
+	//nolint:containedctx // This test fixture owns the subprocess's bounded lifetime.
+	ctx    context.Context
+	cmd    *exec.Cmd
+	stdout *bufio.Reader
+	stderr bytes.Buffer
+	waited bool
+}
+
+func startSignalChild(t *testing.T, opts signalChildOptions) *signalChild {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	t.Cleanup(cancel)
+	binary, err := os.Executable()
+	require.NoError(t, err)
+	// #nosec G204 -- run only this test binary's synchronized signal helper.
+	cmd := exec.CommandContext(ctx, binary, "-test.run=^TestCLISignalHelper$")
+	if opts.shellLoop {
+		// #nosec G204 -- run the fixed loop with this test binary as a positional argument.
+		cmd = exec.CommandContext(ctx, requireBash(t), "-c", `for n in 1 2; do "$@"; done`,
+			"signal-test", binary, "-test.run=^TestCLISignalHelper$")
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+		cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
+	}
+	cmd.Env = append(os.Environ(), "MMDBCONVERT_SIGNAL_TEST_HELPER=1")
+	if opts.blockCleanup {
+		cmd.Env = append(cmd.Env, "MMDBCONVERT_SIGNAL_TEST_BLOCK=1")
+	}
+	if !opts.completed {
+		cmd.Env = append(cmd.Env, "MMDBCONVERT_SIGNAL_TEST_FAILED=1")
+	}
+	child := &signalChild{ctx: ctx, cmd: cmd}
+	cmd.Stderr = &child.stderr
+	stdout, err := cmd.StdoutPipe()
+	require.NoError(t, err)
+	child.stdout = bufio.NewReader(stdout)
+	require.NoError(t, cmd.Start())
+	t.Cleanup(func() {
+		if opts.shellLoop {
+			// Kill any surviving second child even if the shell was already reaped.
+			if err := syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL); err != nil {
+				assert.ErrorIs(t, err, syscall.ESRCH)
+			}
+		}
+		cancel()
+		if !child.waited {
+			child.waited = true
+			// Early assertion failures may leave a child to kill and reap.
+			var exitErr *exec.ExitError
+			if err := cmd.Wait(); err != nil && !errors.As(err, &exitErr) {
+				assert.ErrorIs(t, err, context.Canceled)
+			}
+		}
+	})
+	// The child announces readiness only after signal handling is installed.
+	child.requireStage(t, "ready")
+	return child
+}
+
+func (child *signalChild) requireStage(t *testing.T, stage string) {
+	t.Helper()
+	line, err := child.stdout.ReadString('\n')
+	require.NoError(t, err)
+	require.Equal(t, stage+"\n", line)
+}
+
+func (child *signalChild) wait(t *testing.T) (syscall.WaitStatus, string) {
+	t.Helper()
+	require.False(t, child.waited, "child must be reaped exactly once")
+	child.waited = true
+	err := child.cmd.Wait()
+	// Wait completes the stderr copy before the buffer is read.
+	stderr := child.stderr.String()
+	var exitErr *exec.ExitError
+	require.ErrorAs(t, err, &exitErr, stderr)
+	require.NoError(t, child.ctx.Err(), "child must exit through a signal, not timeout")
+	status := exitErr.Sys().(syscall.WaitStatus)
+	require.True(t, status.Signaled(), stderr)
+	return status, stderr
 }
 
 func TestCLISignalHelper(t *testing.T) {
@@ -135,91 +231,12 @@ func TestCLIPreservesIgnoredSignals(t *testing.T) {
 	}
 }
 
-func TestCLISecondSignal(t *testing.T) {
-	for _, tt := range []struct {
-		name   string
-		first  os.Signal
-		second os.Signal
-	}{
-		{name: "interrupt", first: os.Interrupt, second: os.Interrupt},
-		{name: "terminated", first: syscall.SIGTERM, second: syscall.SIGTERM},
-		{name: "hangup", first: syscall.SIGHUP, second: syscall.SIGHUP},
-		{name: "interrupt then terminate", first: os.Interrupt, second: syscall.SIGTERM},
-		{name: "terminate then interrupt", first: syscall.SIGTERM, second: os.Interrupt},
-	} {
-		t.Run(tt.name, func(t *testing.T) {
-			skipIgnoredSignal(t, tt.first)
-			skipIgnoredSignal(t, tt.second)
-			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-			defer cancel()
-			binary, err := os.Executable()
-			require.NoError(t, err)
-			// #nosec G204 -- run only this test binary's synchronized signal helper.
-			cmd := exec.CommandContext(ctx, binary, "-test.run=^TestCLISignalHelper$")
-			cmd.Env = append(
-				os.Environ(),
-				"MMDBCONVERT_SIGNAL_TEST_HELPER=1",
-				"MMDBCONVERT_SIGNAL_TEST_BLOCK=1",
-			)
-			var stderr bytes.Buffer
-			cmd.Stderr = &stderr
-			stdout, err := cmd.StdoutPipe()
-			require.NoError(t, err)
-			require.NoError(t, cmd.Start())
-			reader := bufio.NewReader(stdout)
-			line, err := reader.ReadString('\n')
-			require.NoError(t, err)
-			require.Equal(t, "ready\n", line)
-			require.NoError(t, cmd.Process.Signal(tt.first))
-			line, err = reader.ReadString('\n')
-			require.NoError(t, err)
-			require.Equal(t, "canceled\n", line)
-			require.NoError(t, cmd.Process.Signal(tt.second))
-			var exitErr *exec.ExitError
-			require.ErrorAs(t, cmd.Wait(), &exitErr, stderr.String())
-			status := exitErr.Sys().(syscall.WaitStatus)
-			require.True(t, status.Signaled(), stderr.String())
-			require.Equal(t, tt.second, status.Signal())
-			require.NoError(t, ctx.Err(), "second signal must terminate a blocked conversion")
-			require.NotContains(t, stderr.String(), "cleanup complete")
-		})
-	}
-}
-
 func TestCLIInterruptStopsShellLoop(t *testing.T) {
 	skipIgnoredSignal(t, os.Interrupt)
-	bash := requireBash(t)
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-	defer cancel()
-	binary, err := os.Executable()
-	require.NoError(t, err)
-	// #nosec G204 -- run the fixed loop with this test binary as a positional argument.
-	cmd := exec.CommandContext(ctx, bash, "-c", `for n in 1 2; do "$@"; done`,
-		"signal-test", binary, "-test.run=^TestCLISignalHelper$")
-	cmd.Env = append(os.Environ(), "MMDBCONVERT_SIGNAL_TEST_HELPER=1")
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	stdout, err := cmd.StdoutPipe()
-	require.NoError(t, err)
-	require.NoError(t, cmd.Start())
-	t.Cleanup(func() {
-		// Also reap a second child if a regression lets the loop continue.
-		if err := syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL); err != nil {
-			require.ErrorIs(t, err, syscall.ESRCH)
-		}
-	})
-	line, err := bufio.NewReader(stdout).ReadString('\n')
-	require.NoError(t, err)
-	require.Equal(t, "ready\n", line)
-	require.NoError(t, syscall.Kill(-cmd.Process.Pid, syscall.SIGINT))
-	var exitErr *exec.ExitError
-	require.ErrorAs(t, cmd.Wait(), &exitErr, stderr.String())
-	require.NoError(t, ctx.Err(), "interrupt must stop the loop before a second conversion")
-	require.Contains(t, stderr.String(), "cleanup complete")
-	status := exitErr.Sys().(syscall.WaitStatus)
-	require.True(t, status.Signaled(), stderr.String())
+	child := startSignalChild(t, signalChildOptions{shellLoop: true, completed: true})
+	require.NoError(t, syscall.Kill(-child.cmd.Process.Pid, syscall.SIGINT))
+	status, stderr := child.wait(t)
+	require.Contains(t, stderr, "cleanup complete")
 	require.Equal(t, syscall.SIGINT, status.Signal())
 }
 
