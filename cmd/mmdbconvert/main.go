@@ -29,10 +29,23 @@ const (
 var version = unknownVersion
 
 func main() {
-	os.Exit(runCLI(os.Args[1:], os.Stdout, os.Stderr, term.IsTerminal(int(os.Stderr.Fd()))))
+	os.Exit(
+		runCLI(
+			context.Background(),
+			os.Args[1:],
+			os.Stdout,
+			os.Stderr,
+			term.IsTerminal(int(os.Stderr.Fd())),
+		),
+	)
 }
 
-func runCLI(args []string, stdout, stderr io.Writer, stderrIsTerminal bool) int {
+func runCLI(
+	ctx context.Context,
+	args []string,
+	stdout, stderr io.Writer,
+	stderrIsTerminal bool,
+) int {
 	// Define command-line flags
 	var (
 		configPath   string
@@ -143,6 +156,22 @@ func runCLI(args []string, stdout, stderr io.Writer, stderrIsTerminal bool) int 
 	}
 	logger = logger.With("config_path", configPath, "disable_cache", disableCache)
 
+	opts := mmdbconvert.Options{
+		ConfigPath:   configPath,
+		Variables:    variables,
+		DisableCache: disableCache,
+	}
+	return runWithSignals(ctx, logger, func(ctx context.Context) int {
+		return runConversion(ctx, opts, logger, cpuprofile, memprofile)
+	})
+}
+
+func runConversion(
+	ctx context.Context,
+	opts mmdbconvert.Options,
+	logger *slog.Logger,
+	cpuprofile, memprofile string,
+) int {
 	// Start CPU profiling if requested
 	var cpuProfileFile *os.File
 	if cpuprofile != "" {
@@ -161,11 +190,7 @@ func runCLI(args []string, stdout, stderr io.Writer, stderrIsTerminal bool) int 
 	}
 
 	// Run the conversion
-	runErr := run(mmdbconvert.Options{
-		ConfigPath:   configPath,
-		Variables:    variables,
-		DisableCache: disableCache,
-	}, logger)
+	runErr := run(ctx, opts, logger)
 	if runErr != nil {
 		logger.Error("Converting databases", "error", runErr)
 	}
@@ -208,14 +233,14 @@ func extraConfigArgsMessage(args []string) string {
 }
 
 // run performs the main conversion process.
-func run(opts mmdbconvert.Options, logger *slog.Logger) error {
+func run(ctx context.Context, opts mmdbconvert.Options, logger *slog.Logger) error {
 	startTime := time.Now()
 
 	logger.Info("Starting mmdbconvert")
 	logger.Info("Loading configuration")
 	logger.Info("Merging databases and writing output")
 
-	err := mmdbconvert.Run(context.Background(), opts)
+	err := mmdbconvert.Run(ctx, opts)
 	if err != nil {
 		return err
 	}

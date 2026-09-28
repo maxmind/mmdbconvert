@@ -30,7 +30,7 @@ func TestRunCLIMemoryProfileWriteError(t *testing.T) {
 			}
 			var stdout, stderr bytes.Buffer
 			args := []string{"--quiet", "--memprofile", "/dev/full", path}
-			assert.Equal(t, 1, runCLI(args, &stdout, &stderr, false))
+			assert.Equal(t, 1, runCLI(t.Context(), args, &stdout, &stderr, false))
 			assert.Empty(t, stdout.String())
 
 			records := decodeLogRecords(t, stderr.String())
