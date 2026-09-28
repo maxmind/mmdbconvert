@@ -24,7 +24,7 @@ func TestRunCLICanceled(t *testing.T) {
 			configPath, outputPath := writeTestConfig(t, testDatabasePath(t))
 			require.NoError(t, os.WriteFile(outputPath, []byte("previous output"), 0o600))
 			ctx, cancel := context.WithCancelCause(t.Context())
-			cancel(errors.New("terminated signal received"))
+			cancel(errors.New("caller canceled conversion"))
 			var stdout, stderr bytes.Buffer
 			require.Equal(
 				t,
@@ -39,7 +39,15 @@ func TestRunCLICanceled(t *testing.T) {
 			)
 			require.Empty(t, stdout.String())
 			require.Contains(t, stderr.String(), "context canceled")
-			require.Contains(t, stderr.String(), "terminated signal received")
+			require.Contains(t, stderr.String(), "caller canceled conversion")
+			require.NotContains(t, stderr.String(), "Signal received")
+			if format == "json" {
+				records := decodeLogRecords(t, stderr.String())
+				warning := records[len(records)-1]
+				require.Equal(t, "Conversion context canceled", warning["message"])
+				require.Contains(t, warning["error"], "caller canceled conversion")
+				require.NotContains(t, warning, "cause")
+			}
 			require.NotContains(t, stderr.String(), "Successfully completed")
 			data, err := os.ReadFile(filepath.Clean(outputPath))
 			require.NoError(t, err)

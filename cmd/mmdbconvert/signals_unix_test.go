@@ -20,35 +20,50 @@ import (
 
 func TestCLISignals(t *testing.T) {
 	for _, sig := range []os.Signal{os.Interrupt, syscall.SIGTERM, syscall.SIGHUP} {
-		t.Run(sig.String(), func(t *testing.T) {
-			skipIgnoredSignal(t, sig)
-			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-			defer cancel()
-			binary, err := os.Executable()
-			require.NoError(t, err)
-			// #nosec G204 -- run only this test binary's synchronized signal helper.
-			cmd := exec.CommandContext(ctx, binary, "-test.run=^TestCLISignalHelper$")
-			cmd.Env = append(os.Environ(), "MMDBCONVERT_SIGNAL_TEST_HELPER=1")
-			var stderr bytes.Buffer
-			cmd.Stderr = &stderr
-			stdout, err := cmd.StdoutPipe()
-			require.NoError(t, err)
-			require.NoError(t, cmd.Start())
-			// The child announces readiness only after signal handling is installed.
-			line, err := bufio.NewReader(stdout).ReadString('\n')
-			require.NoError(t, err)
-			require.Equal(t, "ready\n", line)
-			require.NoError(t, cmd.Process.Signal(sig))
-			err = cmd.Wait()
-			var exitErr *exec.ExitError
-			require.ErrorAs(t, err, &exitErr, stderr.String())
-			status := exitErr.Sys().(syscall.WaitStatus)
-			require.True(t, status.Signaled(), stderr.String())
-			require.Equal(t, sig, status.Signal())
-			require.Contains(t, stderr.String(), sig.String()+" signal received")
-			require.NoError(t, ctx.Err(), "child should exit through cancellation, not timeout")
-			require.Contains(t, stderr.String(), "cleanup complete")
-		})
+		for _, completed := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/completed=%t", sig, completed), func(t *testing.T) {
+				skipIgnoredSignal(t, sig)
+				ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+				defer cancel()
+				binary, err := os.Executable()
+				require.NoError(t, err)
+				// #nosec G204 -- run only this test binary's synchronized signal helper.
+				cmd := exec.CommandContext(ctx, binary, "-test.run=^TestCLISignalHelper$")
+				cmd.Env = append(os.Environ(), "MMDBCONVERT_SIGNAL_TEST_HELPER=1")
+				if !completed {
+					cmd.Env = append(cmd.Env, "MMDBCONVERT_SIGNAL_TEST_FAILED=1")
+				}
+				var stderr bytes.Buffer
+				cmd.Stderr = &stderr
+				stdout, err := cmd.StdoutPipe()
+				require.NoError(t, err)
+				require.NoError(t, cmd.Start())
+				// The child announces readiness only after signal handling is installed.
+				line, err := bufio.NewReader(stdout).ReadString('\n')
+				require.NoError(t, err)
+				require.Equal(t, "ready\n", line)
+				require.NoError(t, cmd.Process.Signal(sig))
+				err = cmd.Wait()
+				var exitErr *exec.ExitError
+				require.ErrorAs(t, err, &exitErr, stderr.String())
+				status := exitErr.Sys().(syscall.WaitStatus)
+				require.True(t, status.Signaled(), stderr.String())
+				require.Equal(t, sig, status.Signal())
+				require.Contains(t, stderr.String(), sig.String()+" signal received")
+				require.NoError(t, ctx.Err(), "child should exit through cancellation, not timeout")
+				require.Contains(t, stderr.String(), "cleanup complete")
+				records := decodeLogRecords(t, stderr.String())
+				require.Len(t, records, 2)
+				warning := records[1]
+				message := "Signal received"
+				if completed {
+					message = "Signal received; conversion completed and outputs were published"
+				}
+				require.Equal(t, message, warning["message"])
+				require.Contains(t, warning["error"], sig.String()+" signal received")
+				require.NotContains(t, warning, "cause")
+			})
+		}
 	}
 }
 
@@ -76,7 +91,7 @@ func TestCLISignalHelper(t *testing.T) {
 			}
 			return 0
 		}
-		defer fmt.Fprintln(os.Stderr, "cleanup complete")
+		defer logger.Warn("cleanup complete")
 		_, err := fmt.Fprintln(os.Stdout, "ready")
 		require.NoError(t, err)
 		<-ctx.Done()
@@ -87,6 +102,9 @@ func TestCLISignalHelper(t *testing.T) {
 			select {}
 		}
 		// Publication may complete successfully even after a signal arrives.
+		if os.Getenv("MMDBCONVERT_SIGNAL_TEST_FAILED") == "1" {
+			return 1
+		}
 		return 0
 	})
 	//revive:disable-next-line:deep-exit Subprocess helper must expose the CLI's exit status.

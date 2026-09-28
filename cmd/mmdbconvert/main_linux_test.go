@@ -21,7 +21,7 @@ func TestRunCLIMemoryProfileWriteError(t *testing.T) {
 	if info.Mode()&os.ModeCharDevice == 0 {
 		t.Skip("/dev/full is not a character device")
 	}
-	configPath, _ := writeTestConfig(t, testDatabasePath(t))
+	configPath, outputPath := writeTestConfig(t, testDatabasePath(t))
 	for _, failConversion := range []bool{false, true} {
 		t.Run(fmt.Sprintf("conversion_failure=%t", failConversion), func(t *testing.T) {
 			path := configPath
@@ -40,6 +40,10 @@ func TestRunCLIMemoryProfileWriteError(t *testing.T) {
 				assert.Contains(t, records[0]["error"], path)
 			} else {
 				require.Len(t, records, 1)
+				// A profiling failure can follow successful output publication.
+				output, statErr := os.Stat(outputPath)
+				require.NoError(t, statErr)
+				require.Positive(t, output.Size())
 			}
 			for _, record := range records {
 				assert.Equal(t, "ERROR", record["level"])

@@ -16,11 +16,16 @@ func runWithSignals(ctx context.Context, logger *slog.Logger, run func(context.C
 		signal.Notify(signals, watched...)
 	}
 	code, cause := runWithSignalChannel(ctx, run, signals, logger)
-	if cause != nil {
-		logger.Warn("Conversion interrupted", "cause", cause)
-	}
 	if interruption, ok := errors.AsType[*signalError](cause); ok {
+		message := "Signal received"
+		if code == 0 {
+			message = "Signal received; conversion completed and outputs were published"
+		}
+		logger.Warn(message, "error", cause)
 		return exitAfterSignal(interruption.signal, logger)
+	}
+	if cause != nil {
+		logger.Warn("Conversion context canceled", "error", cause)
 	}
 	return code
 }
