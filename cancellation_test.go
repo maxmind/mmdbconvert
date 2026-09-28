@@ -7,10 +7,8 @@ import (
 	"fmt"
 	"net/netip"
 	"os"
-	"path/filepath"
 	"testing"
 
-	"github.com/maxmind/mmdbwriter/v2"
 	"github.com/maxmind/mmdbwriter/v2/mmdbtype"
 	"github.com/stretchr/testify/require"
 
@@ -79,19 +77,10 @@ func TestConvert_CancellationCleansOutputs(t *testing.T) {
 }
 
 func TestConvert_CancellationDuringFinalAccumulatorFlush(t *testing.T) {
-	_, cfg, paths := outputTestConfig(t, "mmdb", false, `["country_code"]`)
+	_, cfg, paths := outputTestConfig(t, "mmdb", false, `["value"]`)
 	require.NoError(t, os.WriteFile(paths[0], []byte("previous output"), 0o600))
 	// A single data range stays in the accumulator until Merge's final Flush.
-	tree, err := mmdbwriter.New(mmdbwriter.Options{IPVersion: 4})
-	require.NoError(t, err)
-	require.NoError(t, tree.Insert(netip.MustParsePrefix("1.0.0.0/24"), mmdbtype.Map{
-		"country_code": mmdbtype.String("GB"),
-	}))
-	var buf bytes.Buffer
-	_, err = tree.WriteTo(&buf)
-	require.NoError(t, err)
-	cfg.Databases[0].Path = filepath.Join(t.TempDir(), "single-range.mmdb")
-	require.NoError(t, os.WriteFile(cfg.Databases[0].Path, buf.Bytes(), 0o600))
+	cfg.Databases[0].Path = createCSVTestDatabase(t, 4, []string{"1.0.0.0/24"})
 
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
