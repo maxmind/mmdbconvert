@@ -122,7 +122,7 @@ func runCLI(args []string, stdout, stderr io.Writer, stderrIsTerminal bool) int 
 	}
 
 	if flags.NArg() > 1 || (configPath != "" && flags.NArg() > 0) {
-		logger.Error("Only one config file path may be specified")
+		logger.Error(extraConfigArgsMessage(flags.Args()[1:]))
 		if format == logFormatText {
 			usage(stderr)
 		}
@@ -195,6 +195,15 @@ func runCLI(args []string, stdout, stderr io.Writer, stderrIsTerminal bool) int 
 		return 1
 	}
 	return 0
+}
+
+func extraConfigArgsMessage(args []string) string {
+	for _, arg := range args {
+		if strings.HasPrefix(arg, "-") && arg != "-" {
+			return "Flags must precede a positional config path; use --config to specify the path alongside flags"
+		}
+	}
+	return "Only one config file path may be specified"
 }
 
 // run performs the main conversion process.
