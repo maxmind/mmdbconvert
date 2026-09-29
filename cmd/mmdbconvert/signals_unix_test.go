@@ -8,10 +8,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"os/exec"
 	"os/signal"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -84,11 +86,12 @@ type signalChildOptions struct {
 
 type signalChild struct {
 	//nolint:containedctx // This test fixture owns the subprocess's bounded lifetime.
-	ctx    context.Context
-	cmd    *exec.Cmd
-	stdout *bufio.Reader
-	stderr bytes.Buffer
-	waited bool
+	ctx         context.Context
+	cmd         *exec.Cmd
+	stdout      *bufio.Reader
+	stderr      bytes.Buffer
+	waited      bool
+	stopHelpers func()
 }
 
 func startSignalChild(t *testing.T, opts signalChildOptions) *signalChild {
@@ -104,7 +107,6 @@ func startSignalChild(t *testing.T, opts signalChildOptions) *signalChild {
 		cmd = exec.CommandContext(ctx, requireBash(t), "-c", `for n in 1 2; do "$@"; done`,
 			"signal-test", binary, "-test.run=^TestCLISignalHelper$")
 		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-		cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
 	}
 	cmd.Env = append(os.Environ(), "MMDBCONVERT_SIGNAL_TEST_HELPER=1")
 	if opts.blockCleanup {
@@ -113,19 +115,29 @@ func startSignalChild(t *testing.T, opts signalChildOptions) *signalChild {
 	if !opts.completed {
 		cmd.Env = append(cmd.Env, "MMDBCONVERT_SIGNAL_TEST_FAILED=1")
 	}
-	child := &signalChild{ctx: ctx, cmd: cmd}
+	child := &signalChild{ctx: ctx, cmd: cmd, stopHelpers: func() {}}
+	closeInput := func() {}
+	if opts.shellLoop {
+		input, lifetime, err := os.Pipe()
+		require.NoError(t, err)
+		closeInput = sync.OnceFunc(func() { assert.NoError(t, input.Close()) })
+		t.Cleanup(closeInput)
+		child.stopHelpers = sync.OnceFunc(func() { assert.NoError(t, lifetime.Close()) })
+		t.Cleanup(child.stopHelpers)
+		// Cmd.Wait may reap Bash before a helper releases its inherited stderr.
+		// Keep this independent of os/exec's context watcher, which stops at reap.
+		stop := context.AfterFunc(ctx, child.stopHelpers)
+		t.Cleanup(func() { stop() })
+		cmd.Stdin = input
+		cmd.Env = append(cmd.Env, "MMDBCONVERT_SIGNAL_TEST_LIFETIME=1")
+	}
 	cmd.Stderr = &child.stderr
 	stdout, err := cmd.StdoutPipe()
 	require.NoError(t, err)
 	child.stdout = bufio.NewReader(stdout)
 	require.NoError(t, cmd.Start())
 	t.Cleanup(func() {
-		if opts.shellLoop {
-			// Kill any surviving second child even if the shell was already reaped.
-			if err := syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL); err != nil {
-				assert.ErrorIs(t, err, syscall.ESRCH)
-			}
-		}
+		child.stopHelpers()
 		cancel()
 		if !child.waited {
 			child.waited = true
@@ -136,6 +148,7 @@ func startSignalChild(t *testing.T, opts signalChildOptions) *signalChild {
 			}
 		}
 	})
+	closeInput()
 	// The child announces readiness only after signal handling is installed.
 	child.requireStage(t, "ready")
 	return child
@@ -166,6 +179,16 @@ func (child *signalChild) wait(t *testing.T) (syscall.WaitStatus, string) {
 func TestCLISignalHelper(t *testing.T) {
 	if os.Getenv("MMDBCONVERT_SIGNAL_TEST_HELPER") != "1" {
 		return
+	}
+	if os.Getenv("MMDBCONVERT_SIGNAL_TEST_LIFETIME") == "1" {
+		go func() {
+			// EOF ends every helper, including a second loop iteration orphaned
+			// after Bash exits. A read failure must also stop the helper.
+			_, err := io.Copy(io.Discard, os.Stdin)
+			assert.NoError(t, err)
+			//revive:disable-next-line:deep-exit The parent is tearing down the subprocess fixture.
+			os.Exit(1)
+		}()
 	}
 	var ignored []os.Signal
 	switch os.Getenv("MMDBCONVERT_SIGNAL_TEST_IGNORED") {
@@ -238,6 +261,16 @@ func TestCLIInterruptStopsShellLoop(t *testing.T) {
 	status, stderr := child.wait(t)
 	require.Contains(t, stderr, "cleanup complete")
 	require.Equal(t, syscall.SIGINT, status.Signal())
+}
+
+func TestCLIShellLoopCleanup(t *testing.T) {
+	child := startSignalChild(t, signalChildOptions{shellLoop: true})
+	// Killing only Bash leaves its helper holding stderr open. Closing the
+	// inherited input must stop that helper so Wait can finish before timeout.
+	require.NoError(t, child.cmd.Process.Kill())
+	child.stopHelpers()
+	status, _ := child.wait(t)
+	require.Equal(t, syscall.SIGKILL, status.Signal())
 }
 
 func skipIgnoredSignal(t *testing.T, sig os.Signal) {
