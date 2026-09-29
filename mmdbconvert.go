@@ -3,6 +3,7 @@
 package mmdbconvert
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
@@ -28,8 +29,17 @@ type Options struct {
 	DisableCache bool
 }
 
-// Run performs the MMDB conversion using the specified options.
-func Run(opts Options) error {
+// Run performs the conversion, stopping and cleaning staged outputs when
+// ctx is canceled before publication. Once publication starts, it runs to completion.
+// Cancellation is cooperative and may wait for an operation already in progress.
+// Run does not install signal handlers.
+// When cancellation stops conversion, the returned error matches context.Canceled
+// or context.DeadlineExceeded through errors.Is. Custom causes remain available
+// through context.Cause(ctx).
+func Run(ctx context.Context, opts Options) error {
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("starting conversion: %w", err)
+	}
 	if opts.ConfigPath == "" {
 		return errors.New("config path is required")
 	}
@@ -58,15 +68,16 @@ func Run(opts Options) error {
 		return fmt.Errorf("validating network columns: %w", err)
 	}
 
-	rowWriter, outputs, err := prepareRowWriter(cfg, readers)
+	rowWriter, outputs, err := prepareRowWriter(ctx, cfg, readers)
 	if err != nil {
 		return err
 	}
-	return convert(cfg, readers, rowWriter, outputs)
+	return convert(ctx, cfg, readers, rowWriter, outputs)
 }
 
 // convert owns the prepared outputs through conversion, publication, and cleanup.
 func convert(
+	ctx context.Context,
 	cfg *config.Config,
 	readers *mmdb.Readers,
 	rowWriter merger.RowWriter,
@@ -80,11 +91,11 @@ func convert(
 	if err != nil {
 		return fmt.Errorf("creating merger: %w", err)
 	}
-	if err := m.Merge(); err != nil {
+	if err := m.Merge(ctx); err != nil {
 		return fmt.Errorf("merging databases: %w", err)
 	}
 
-	return flushAndCommit(rowWriter, outputs)
+	return flushAndCommit(ctx, rowWriter, outputs)
 }
 
 func detectIPVersionFromDatabases(cfg *config.Config, readers *mmdb.Readers) (int, error) {

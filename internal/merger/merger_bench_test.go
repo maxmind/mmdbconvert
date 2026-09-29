@@ -54,7 +54,7 @@ func BenchmarkMergerFullMerge(b *testing.B) {
 		require.NoError(b, err)
 
 		b.StartTimer()
-		err = merger.Merge()
+		err = merger.Merge(b.Context())
 		b.StopTimer()
 
 		require.NoError(b, err)

@@ -18,9 +18,14 @@ and this project adheres to
   override automatic selection. JSON records use `time`, `level`, and `message`
   fields with additional context, including `error` for failures.
 - Per-column CSV formats for fixed-precision floats and custom boolean labels.
+- Cooperative cancellation via `Run` and CLI handling of SIGINT and SIGTERM,
+  plus SIGHUP on Unix. Cancellation cleans up temporary files and preserves
+  existing output until publication starts.
 
 ### Changed
 
+- The Go library's `Run` now requires a `context.Context` as its first argument.
+  Pass `context.Background()` when cancellation is not needed.
 - Filesystem paths now interpret `${name}` as a parameter, even when no
   variables are supplied. Undefined parameters and malformed placeholders are
   errors; escape a literal `${` as `$${`.
@@ -42,6 +47,8 @@ and this project adheres to
 
 ### Fixed
 
+- Nested 128-bit unsigned integers in maps and arrays are now serialized as
+  exact JSON numbers in CSV and Parquet string columns.
 - Extra command-line arguments are now rejected instead of silently ignored.
 - CSV output now includes the configured header when no data rows are emitted,
   including when an IP family has no records. This applies when `include_header`

@@ -139,6 +139,34 @@ Split IPv4/IPv6 files are replaced separately, so a failure can leave only one
 updated. Use a fresh output directory for each build if both files must be
 published together. Abrupt termination can leave temporary files behind.
 
+Go callers pass a context to `Run(ctx, opts)`, which does not install signal
+handlers. Use `context.Background()` when cancellation is not needed.
+Cancellation removes staged files and preserves existing outputs before
+publication starts. When cancellation stops conversion, the returned error
+matches `context.Canceled` or `context.DeadlineExceeded` through `errors.Is`.
+Callers can inspect a custom cancellation cause with `context.Cause(ctx)`.
+
+Cancellation is cooperative: cleanup may wait for an operation already in
+progress. Once publication starts, it finishes before exiting.
+
+On Unix and Windows, the CLI handles SIGINT and SIGTERM (plus SIGHUP on Unix) by
+canceling conversion and cleaning up temporary files. On Unix, inherited ignored
+SIGINT and SIGHUP stay ignored, preserving background-job and `nohup` behavior.
+Other platforms retain their native signal handling.
+
+After cleanup, the CLI re-raises the handled signal on Unix so an interrupt
+stops waiting shell loops, even if the output was published. If re-raising fails
+or the process does not terminate within one second, the CLI logs the condition
+and exits with `128 + signal number`. On Windows it uses the native console
+termination status `STATUS_CONTROL_C_EXIT` (`0xC000013A`, or `-1073741510` as a
+signed value).
+
+A second handled signal forces termination without waiting for cleanup. A
+wrapper that forwards a signal the CLI also receives directly can trigger this
+with a single Ctrl-C. Windows also limits cleanup time for console close,
+logoff, and shutdown events. These forced terminations can leave temporary files
+behind.
+
 #### CSV Options
 
 When `format = "csv"`, you can specify CSV-specific options:

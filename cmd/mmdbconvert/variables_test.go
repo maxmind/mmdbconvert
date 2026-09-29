@@ -35,7 +35,7 @@ func TestRunCLIPathVariables(t *testing.T) {
 				args = append([]string{"--config", configPath}, args...)
 			}
 			var stdout, stderr bytes.Buffer
-			require.Equal(t, 0, runCLI(args, &stdout, &stderr, false), stderr.String())
+			require.Equal(t, 0, runCLI(t.Context(), args, &stdout, &stderr, false), stderr.String())
 			assert.Empty(t, stdout.String())
 			assert.Empty(t, stderr.String())
 			for _, path := range []string{ipv4, ipv6} {
@@ -114,7 +114,7 @@ func TestRunCLIPathVariableErrors(t *testing.T) {
 				args := append([]string{"--log-format=" + format}, baseArgs...)
 				args = append(args, tt.args...)
 				var stdout, stderr bytes.Buffer
-				assert.Equal(t, tt.code, runCLI(args, &stdout, &stderr, false))
+				assert.Equal(t, tt.code, runCLI(t.Context(), args, &stdout, &stderr, false))
 				assert.Empty(t, stdout.String())
 				if format == "json" {
 					records := decodeLogRecords(t, stderr.String())
@@ -143,7 +143,7 @@ func TestRunCLIPathVariableErrors(t *testing.T) {
 func TestRunCLIPathVariablesRequired(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	args := []string{"--quiet", "--log-format=json", "--config", writePathVariableConfig(t)}
-	assert.Equal(t, 1, runCLI(args, &stdout, &stderr, false))
+	assert.Equal(t, 1, runCLI(t.Context(), args, &stdout, &stderr, false))
 	records := decodeLogRecords(t, stderr.String())
 	require.Len(t, records, 1)
 	assert.Contains(t, records[0]["error"], `output.ipv4_file: undefined variable "ipv4"`)

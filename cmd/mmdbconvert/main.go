@@ -2,6 +2,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"fmt"
@@ -28,10 +29,23 @@ const (
 var version = unknownVersion
 
 func main() {
-	os.Exit(runCLI(os.Args[1:], os.Stdout, os.Stderr, term.IsTerminal(int(os.Stderr.Fd()))))
+	os.Exit(
+		runCLI(
+			context.Background(),
+			os.Args[1:],
+			os.Stdout,
+			os.Stderr,
+			term.IsTerminal(int(os.Stderr.Fd())),
+		),
+	)
 }
 
-func runCLI(args []string, stdout, stderr io.Writer, stderrIsTerminal bool) int {
+func runCLI(
+	ctx context.Context,
+	args []string,
+	stdout, stderr io.Writer,
+	stderrIsTerminal bool,
+) int {
 	// Define command-line flags
 	var (
 		configPath   string
@@ -142,89 +156,14 @@ func runCLI(args []string, stdout, stderr io.Writer, stderrIsTerminal bool) int 
 	}
 	logger = logger.With("config_path", configPath, "disable_cache", disableCache)
 
-	// Start CPU profiling if requested
-	var cpuProfileFile *os.File
-	if cpuprofile != "" {
-		// #nosec G304 -- cpuprofile path comes from trusted command-line flag
-		f, err := os.Create(cpuprofile)
-		if err != nil {
-			logger.Error("Creating CPU profile", "error", err)
-			return 1
-		}
-		cpuProfileFile = f
-		if err := pprof.StartCPUProfile(f); err != nil {
-			logger.Error("Starting CPU profile", "error", err)
-			f.Close()
-			return 1
-		}
-	}
-
-	// Run the conversion
-	runErr := run(mmdbconvert.Options{
+	opts := mmdbconvert.Options{
 		ConfigPath:   configPath,
 		Variables:    variables,
 		DisableCache: disableCache,
-	}, logger)
-	if runErr != nil {
-		logger.Error("Converting databases", "error", runErr)
 	}
-
-	// Stop CPU profiling and close file before potentially exiting
-	if cpuProfileFile != nil {
-		pprof.StopCPUProfile()
-		cpuProfileFile.Close()
-	}
-
-	// Write memory profile if requested
-	if memprofile != "" {
-		// #nosec G304 -- memprofile path comes from trusted command-line flag
-		f, err := os.Create(memprofile)
-		if err != nil {
-			logger.Error("Creating memory profile", "error", err)
-			return 1
-		}
-		if err := pprof.WriteHeapProfile(f); err != nil {
-			f.Close()
-			logger.Error("Writing memory profile", "error", err)
-			return 1
-		}
-		f.Close()
-	}
-
-	if runErr != nil {
-		return 1
-	}
-	return 0
-}
-
-func extraConfigArgsMessage(args []string) string {
-	for _, arg := range args {
-		if strings.HasPrefix(arg, "-") && arg != "-" {
-			return "Flags must precede a positional config path; use --config to specify the path alongside flags"
-		}
-	}
-	return "Only one config file path may be specified"
-}
-
-// run performs the main conversion process.
-func run(opts mmdbconvert.Options, logger *slog.Logger) error {
-	startTime := time.Now()
-
-	logger.Info("Starting mmdbconvert")
-	logger.Info("Loading configuration")
-	logger.Info("Merging databases and writing output")
-
-	err := mmdbconvert.Run(opts)
-	if err != nil {
-		return err
-	}
-
-	logger.Info(
-		"Successfully completed",
-		slog.Duration("elapsed", time.Since(startTime).Round(time.Millisecond)),
-	)
-
-	return nil
+	return runWithSignals(ctx, logger, func(ctx context.Context) int {
+		return runConversion(ctx, opts, logger, cpuprofile, memprofile)
+	})
 }
 
 func usage(w io.Writer) {
@@ -288,4 +227,91 @@ MORE INFORMATION:
 
 `,
 	)
+}
+
+func extraConfigArgsMessage(args []string) string {
+	for _, arg := range args {
+		if strings.HasPrefix(arg, "-") && arg != "-" {
+			return "Flags must precede a positional config path; use --config to specify the path alongside flags"
+		}
+	}
+	return "Only one config file path may be specified"
+}
+
+func runConversion(
+	ctx context.Context,
+	opts mmdbconvert.Options,
+	logger *slog.Logger,
+	cpuprofile, memprofile string,
+) int {
+	// Start CPU profiling if requested
+	var cpuProfileFile *os.File
+	if cpuprofile != "" {
+		// #nosec G304 -- cpuprofile path comes from trusted command-line flag
+		f, err := os.Create(cpuprofile)
+		if err != nil {
+			logger.Error("Creating CPU profile", "error", err)
+			return 1
+		}
+		cpuProfileFile = f
+		if err := pprof.StartCPUProfile(f); err != nil {
+			logger.Error("Starting CPU profile", "error", err)
+			f.Close()
+			return 1
+		}
+	}
+
+	// Run the conversion
+	runErr := run(ctx, opts, logger)
+	if runErr != nil {
+		logger.Error("Converting databases", "error", runErr)
+	}
+
+	// Stop CPU profiling and close file before potentially exiting
+	if cpuProfileFile != nil {
+		pprof.StopCPUProfile()
+		cpuProfileFile.Close()
+	}
+
+	// Write memory profile if requested
+	if memprofile != "" {
+		// #nosec G304 -- memprofile path comes from trusted command-line flag
+		f, err := os.Create(memprofile)
+		if err != nil {
+			logger.Error("Creating memory profile", "error", err)
+			return 1
+		}
+		if err := pprof.WriteHeapProfile(f); err != nil {
+			f.Close()
+			logger.Error("Writing memory profile", "error", err)
+			return 1
+		}
+		f.Close()
+	}
+
+	if runErr != nil {
+		return 1
+	}
+	return 0
+}
+
+// run performs the main conversion process.
+func run(ctx context.Context, opts mmdbconvert.Options, logger *slog.Logger) error {
+	startTime := time.Now()
+
+	logger.Info("Starting mmdbconvert")
+	logger.Info("Loading configuration")
+	logger.Info("Merging databases and writing output")
+
+	err := mmdbconvert.Run(ctx, opts)
+	if err != nil {
+		return err
+	}
+
+	logger.Info(
+		"Successfully completed",
+		slog.Duration("elapsed", time.Since(startTime).Round(time.Millisecond)),
+	)
+
+	return nil
 }

@@ -72,7 +72,7 @@ func TestRun_FormatsAfterMergingAndFiltering(t *testing.T) {
 			require.NoError(t, err)
 			configPath := filepath.Join(dir, "config.toml")
 			require.NoError(t, os.WriteFile(configPath, data, 0o600))
-			require.NoError(t, Run(Options{ConfigPath: configPath}))
+			require.NoError(t, Run(t.Context(), Options{ConfigPath: configPath}))
 			assertFileContent(t, outputPath, tt.want)
 		})
 	}
@@ -109,7 +109,7 @@ func TestRun_FormatTypeMismatchPreservesOutput(t *testing.T) {
 			for _, path := range paths {
 				require.NoError(t, os.WriteFile(path, []byte("previous output"), 0o600))
 			}
-			err = Run(Options{ConfigPath: configPath})
+			err = Run(t.Context(), Options{ConfigPath: configPath})
 			require.ErrorContains(t, err, "column 'country_code'")
 			require.ErrorContains(t, err, tt.want)
 			for _, path := range paths {

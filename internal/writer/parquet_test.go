@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"math"
 	"net/netip"
 	"testing"
 
@@ -495,6 +496,24 @@ func TestConvertToParquetType(t *testing.T) {
 		{"int32 to int64", mmdbtype.Int32(42), "int64", int64(42), false},
 		{"uint16 to int64", mmdbtype.Uint16(42), "int64", int64(42), false},
 		{"uint32 to int64", mmdbtype.Uint32(42), "int64", int64(42), false},
+		{"uint128 to int64", mmdbtype.Uint128{Low: 42}, "int64", int64(42), false},
+		{
+			"uint128 int64 boundary",
+			mmdbtype.Uint128{Low: 1<<63 - 1},
+			"int64",
+			int64(1<<63 - 1),
+			false,
+		},
+		{"uint128 low word overflow", mmdbtype.Uint128{Low: 1 << 63}, "int64", nil, true},
+		{"uint128 high word overflow", mmdbtype.Uint128{High: 1}, "int64", nil, true},
+		{"uint128 to float64", mmdbtype.Uint128{High: 1}, "float64", float64(1 << 64), false},
+		{
+			"uint128 to string",
+			mmdbtype.Uint128{High: 1, Low: 1},
+			"string",
+			"18446744073709551617",
+			false,
+		},
 		{"float32 to float64", mmdbtype.Float32(3.14), "float64", float64(float32(3.14)), false},
 		{"uint32 to float64", mmdbtype.Uint32(42), "float64", float64(42), false},
 		{"bool", mmdbtype.Bool(true), "bool", true, false},
@@ -512,6 +531,25 @@ func TestConvertToParquetType(t *testing.T) {
 				require.NoError(t, err)
 				assert.Equal(t, tt.expected, result)
 			}
+		})
+	}
+}
+
+func TestConvertToParquetType_Uint128FloatRounding(t *testing.T) {
+	for _, value := range []mmdbtype.Uint128{
+		{},
+		{Low: 42},
+		{Low: math.MaxUint64},
+		{High: 1},
+		{High: 1<<53 + 1, Low: 1 << 63},
+		{High: math.MaxUint64, Low: math.MaxUint64},
+	} {
+		t.Run(value.BigInt().String(), func(t *testing.T) {
+			want, _ := value.BigInt().Float64()
+			got, err := convertToParquetType(value, "float64")
+			require.NoError(t, err)
+			// Compare bits to catch one-ULP rounding differences.
+			require.Equal(t, math.Float64bits(want), math.Float64bits(got.(float64)))
 		})
 	}
 }

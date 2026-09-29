@@ -45,7 +45,10 @@ path = ["value"]
 			require.NoError(t, os.WriteFile(configPath, []byte(content), 0o600))
 			variables := map[string]string{"input": databasePath, "output": outputPath}
 			original := maps.Clone(variables)
-			require.NoError(t, Run(Options{ConfigPath: configPath, Variables: variables}))
+			require.NoError(
+				t,
+				Run(t.Context(), Options{ConfigPath: configPath, Variables: variables}),
+			)
 			assert.Equal(t, original, variables)
 
 			switch format {
@@ -102,7 +105,7 @@ database = "source"
 path = ["value"]
 `
 	require.NoError(t, os.WriteFile(configPath, []byte(content), 0o600))
-	require.NoError(t, Run(Options{
+	require.NoError(t, Run(t.Context(), Options{
 		ConfigPath: configPath,
 		Variables:  map[string]string{"input": relativeInput, "output_dir": "."},
 	}))
@@ -157,6 +160,7 @@ path = %q
 			variables := map[string]string{"output": outputPath}
 			maps.Copy(variables, tt.variables)
 			err := Run(
+				t.Context(),
 				Options{ConfigPath: configPath, Variables: variables},
 			)
 			require.ErrorContains(

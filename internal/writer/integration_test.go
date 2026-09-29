@@ -64,7 +64,7 @@ func TestEndToEnd_MMDBExport(t *testing.T) {
 			require.NoError(t, err)
 			m, err := merger.NewMerger(readers, cfg, writer)
 			require.NoError(t, err)
-			require.NoError(t, m.Merge())
+			require.NoError(t, m.Merge(t.Context()))
 			require.NoError(t, writer.Flush())
 
 			output, err := maxminddb.OpenBytes(buf.Bytes())
@@ -154,7 +154,7 @@ func TestEndToEnd_CSVExport(t *testing.T) {
 	// Create merger and run
 	m, err := merger.NewMerger(readers, cfg, csvWriter)
 	require.NoError(t, err)
-	err = m.Merge()
+	err = m.Merge(t.Context())
 	require.NoError(t, err)
 
 	// Flush CSV
@@ -223,7 +223,7 @@ func TestEndToEnd_CSVExport_MultipleNetworkColumns(t *testing.T) {
 
 	m, err := merger.NewMerger(readers, cfg, csvWriter)
 	require.NoError(t, err)
-	err = m.Merge()
+	err = m.Merge(t.Context())
 	require.NoError(t, err)
 
 	err = csvWriter.Flush()
@@ -287,7 +287,7 @@ func TestEndToEnd_CSVExport_MultipleColumns(t *testing.T) {
 
 	m, err := merger.NewMerger(readers, cfg, csvWriter)
 	require.NoError(t, err)
-	err = m.Merge()
+	err = m.Merge(t.Context())
 	require.NoError(t, err)
 
 	err = csvWriter.Flush()
@@ -358,7 +358,7 @@ func TestEndToEnd_CSVExport_NilValues(t *testing.T) {
 
 	m, err := merger.NewMerger(readers, cfg, csvWriter)
 	require.NoError(t, err)
-	err = m.Merge()
+	err = m.Merge(t.Context())
 	require.NoError(t, err)
 
 	err = csvWriter.Flush()

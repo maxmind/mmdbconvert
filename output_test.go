@@ -38,7 +38,7 @@ func TestRun_OutputPublication(t *testing.T) {
 				for _, path := range paths {
 					require.NoError(t, os.WriteFile(path, []byte("previous output"), 0o600))
 				}
-				require.NoError(t, Run(Options{ConfigPath: configPath}))
+				require.NoError(t, Run(t.Context(), Options{ConfigPath: configPath}))
 				for _, path := range paths {
 					data, err := os.ReadFile(filepath.Clean(path))
 					require.NoError(t, err)
@@ -88,7 +88,11 @@ func TestRun_ConversionFailurePreservesOutputs(t *testing.T) {
 				for _, path := range paths {
 					require.NoError(t, os.WriteFile(path, []byte("previous output"), 0o600))
 				}
-				require.ErrorContains(t, Run(Options{ConfigPath: configPath}), "merging databases")
+				require.ErrorContains(
+					t,
+					Run(t.Context(), Options{ConfigPath: configPath}),
+					"merging databases",
+				)
 				for _, path := range paths {
 					assertFileContent(t, path, "previous output")
 				}
@@ -109,7 +113,7 @@ func TestRun_RejectsDuplicateSplitPathsBeforeOpeningFiles(t *testing.T) {
 			require.NoError(t, err)
 			require.NoError(t, os.WriteFile(configPath, data, 0o600))
 			require.NoError(t, os.WriteFile(paths[0], []byte("previous output"), 0o600))
-			err = Run(Options{ConfigPath: configPath})
+			err = Run(t.Context(), Options{ConfigPath: configPath})
 			require.ErrorContains(
 				t,
 				err,
@@ -128,7 +132,7 @@ func TestPrepareRowWriter_SecondOutputFailure(t *testing.T) {
 			require.NoError(t, os.WriteFile(paths[0], []byte("previous output"), 0o600))
 			cfg.Output.IPv6File = filepath.Join(filepath.Dir(paths[1]), "missing", "out")
 			readers := openOutputTestReaders(t, cfg)
-			_, _, err := prepareRowWriter(cfg, readers)
+			_, _, err := prepareRowWriter(t.Context(), cfg, readers)
 			require.ErrorContains(t, err, cfg.Output.IPv6File)
 			assertFileContent(t, paths[0], "previous output")
 			assertOutputDirectory(t, paths[:1])
@@ -190,7 +194,7 @@ func TestRun_RejectsDirectoryBeforeConversion(t *testing.T) {
 				}
 				dir := paths[len(paths)-1]
 				require.NoError(t, os.Mkdir(dir, 0o700))
-				err := Run(Options{ConfigPath: configPath})
+				err := Run(t.Context(), Options{ConfigPath: configPath})
 				require.ErrorContains(t, err, "not a regular file")
 				require.Contains(t, filepath.ToSlash(err.Error()), filepath.ToSlash(dir))
 				require.DirExists(t, dir)
@@ -234,7 +238,7 @@ func TestOutput_FlushFailure(t *testing.T) {
 					[]mmdbtype.DataType{mmdbtype.String("GB")},
 				),
 			)
-			err = flushAndCommit(rowWriter, []pendingOutput{file})
+			err = flushAndCommit(t.Context(), rowWriter, []pendingOutput{file})
 			require.ErrorIs(t, err, writeErr)
 			require.NoError(t, file.Cleanup())
 			assertFileContent(t, paths[0], "previous output")
@@ -266,7 +270,7 @@ func TestOutput_SplitFlushFailure(t *testing.T) {
 			),
 		)
 	}
-	require.ErrorIs(t, flushAndCommit(split, files), writeErr)
+	require.ErrorIs(t, flushAndCommit(t.Context(), split, files), writeErr)
 	require.NoError(t, cleanupOutputs(files))
 	for _, path := range paths {
 		assertFileContent(t, path, "previous output")
@@ -355,7 +359,7 @@ func TestOutput_CommitFailure(t *testing.T) {
 			[]mmdbtype.DataType{mmdbtype.String("GB")},
 		),
 	)
-	require.ErrorContains(t, flushAndCommit(split, files), paths[1])
+	require.ErrorContains(t, flushAndCommit(t.Context(), split, files), paths[1])
 	require.NoError(t, cleanupOutputs(files))
 	assertFileContent(t, paths[0], "network,country_code\n2.0.0.0/24,GB\n")
 	require.DirExists(t, paths[1])
@@ -395,7 +399,7 @@ func TestConvert_PreservesPrimaryAndCleanupErrors(t *testing.T) {
 			case "publication":
 				first.commitErr = primaryErr
 			}
-			err := convert(cfg, readers, rowWriter, []pendingOutput{first, second})
+			err := convert(t.Context(), cfg, readers, rowWriter, []pendingOutput{first, second})
 			if stage != "cleanup only" {
 				require.ErrorIs(t, err, primaryErr)
 			}
@@ -593,7 +597,7 @@ func TestRun_FilesystemAliases(t *testing.T) {
 				require.NoError(t, os.WriteFile(configPath, data, 0o600))
 				require.ErrorContains(
 					t,
-					Run(Options{ConfigPath: configPath}),
+					Run(t.Context(), Options{ConfigPath: configPath}),
 					"refer to the same file",
 				)
 				if existing {

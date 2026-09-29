@@ -422,8 +422,8 @@ func convertToString(value any) (string, error) {
 		return strconv.FormatUint(uint64(v), 10), nil
 	case mmdbtype.Uint64:
 		return strconv.FormatUint(uint64(v), 10), nil
-	case *mmdbtype.Uint128:
-		return (*big.Int)(v).String(), nil
+	case mmdbtype.Uint128:
+		return formatUint128(v), nil
 	case mmdbtype.Float32:
 		return strconv.FormatFloat(float64(v), 'g', -1, 32), nil
 	case mmdbtype.Float64:
@@ -431,13 +431,13 @@ func convertToString(value any) (string, error) {
 	case mmdbtype.Bytes:
 		return hex.EncodeToString([]byte(v)), nil
 	case mmdbtype.Map:
-		b, err := json.Marshal(v)
+		b, err := json.Marshal(normalizeMMDBJSON(v))
 		if err != nil {
 			return "", fmt.Errorf("marshaling map to JSON: %w", err)
 		}
 		return string(b), nil
 	case mmdbtype.Slice:
-		b, err := json.Marshal(v)
+		b, err := json.Marshal(normalizeMMDBJSON(v))
 		if err != nil {
 			return "", fmt.Errorf("marshaling slice to JSON: %w", err)
 		}
@@ -446,4 +446,11 @@ func convertToString(value any) (string, error) {
 		// Fallback for any unexpected types
 		return fmt.Sprintf("%v", v), nil
 	}
+}
+
+func formatUint128(value mmdbtype.Uint128) string {
+	if value.High == 0 {
+		return strconv.FormatUint(value.Low, 10)
+	}
+	return value.BigInt().String()
 }
