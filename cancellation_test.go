@@ -164,7 +164,7 @@ func TestContextWriter_Cancellation(t *testing.T) {
 	require.Equal(t, "first", buf.String())
 }
 
-func TestConvert_CancellationDuringWrite(t *testing.T) {
+func TestConvert_CancellationAfterOutputWrite(t *testing.T) {
 	for _, format := range []string{"csv", "parquet", "mmdb"} {
 		t.Run(format, func(t *testing.T) {
 			_, cfg, paths := outputTestConfig(t, format, false, `["country", "iso_code"]`)
@@ -174,6 +174,8 @@ func TestConvert_CancellationDuringWrite(t *testing.T) {
 			file, err := preparePendingOutput(paths[0])
 			require.NoError(t, err)
 			defer func() { require.NoError(t, file.Cleanup()) }()
+			// Cancel after an underlying write succeeds. Even if serialization
+			// finishes in that write, the publication check must preserve the old output.
 			output := &cancelWriteOutput{pendingOutput: file, cancel: cancel}
 			readers := openOutputTestReaders(t, cfg)
 			rowWriter, err := newRowWriter(
