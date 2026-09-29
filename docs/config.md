@@ -142,7 +142,9 @@ published together. Abrupt termination can leave temporary files behind.
 Go callers pass a context to `Run(ctx, opts)`, which does not install signal
 handlers. Use `context.Background()` when cancellation is not needed.
 Cancellation removes staged files and preserves existing outputs before
-publication starts.
+publication starts. When cancellation stops conversion, the returned error
+matches `context.Canceled` or `context.DeadlineExceeded` through `errors.Is`.
+Callers can inspect a custom cancellation cause with `context.Cause(ctx)`.
 
 Cancellation is cooperative: cleanup may wait for an operation already in
 progress. Once publication starts, it finishes before exiting.

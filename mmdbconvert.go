@@ -33,6 +33,9 @@ type Options struct {
 // ctx is canceled before publication. Once publication starts, it runs to completion.
 // Cancellation is cooperative and may wait for an operation already in progress.
 // Run does not install signal handlers.
+// When cancellation stops conversion, the returned error matches context.Canceled
+// or context.DeadlineExceeded through errors.Is. Custom causes remain available
+// through context.Cause(ctx).
 func Run(ctx context.Context, opts Options) error {
 	if err := ctx.Err(); err != nil {
 		return fmt.Errorf("starting conversion: %w", err)
