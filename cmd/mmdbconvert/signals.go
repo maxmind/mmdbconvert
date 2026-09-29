@@ -24,7 +24,7 @@ func runWithSignals(ctx context.Context, logger *slog.Logger, run func(context.C
 		logger.Warn(message, "error", cause)
 		return exitAfterSignal(interruption.signal, logger)
 	}
-	if cause != nil {
+	if cause != nil && code != 0 {
 		logger.Warn("Conversion context canceled", "error", cause)
 	}
 	return code
@@ -41,24 +41,24 @@ func runWithSignalChannel(
 	defer cancel(nil)
 	finished := make(chan struct{})
 	done := make(chan struct{})
+	var interruption *signalError
 	go func(finished <-chan struct{}) {
 		defer close(done)
-		interrupted := false
 		for {
 			select {
 			case sig, ok := <-signals:
 				if !ok {
 					return
 				}
-				if interrupted {
+				if interruption != nil {
 					//revive:disable-next-line:deep-exit A second signal must bypass blocked cleanup.
 					os.Exit(exitAfterSignal(sig, logger))
 				}
 				// Restore default handling before cancellation becomes visible,
 				// so a second signal can terminate blocked cleanup.
 				signal.Stop(signals)
-				interrupted = true
-				cancel(&signalError{signal: sig})
+				interruption = &signalError{signal: sig}
+				cancel(interruption)
 			case <-finished:
 				// Stop guarantees no more sends. Drain queued signals before
 				// normal completion can cancel the context without a cause.
@@ -71,6 +71,11 @@ func runWithSignalChannel(
 	code := run(ctx)
 	close(finished)
 	<-done
+	// Parent cancellation may have won the context's cause. A received signal
+	// still determines process termination, independently of the callback's cause.
+	if interruption != nil {
+		return code, fmt.Errorf("running conversion: %w", interruption)
+	}
 	if cause := context.Cause(ctx); cause != nil {
 		return code, fmt.Errorf("running conversion: %w", cause)
 	}
