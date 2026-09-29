@@ -166,6 +166,69 @@ func runCLI(
 	})
 }
 
+func usage(w io.Writer) {
+	//nolint:errcheck // Usage is best effort; a write error means stderr is unavailable.
+	fmt.Fprint(
+		w,
+		`mmdbconvert - Merge MaxMind MMDB databases and export to CSV, Parquet, or MMDB
+
+USAGE:
+    mmdbconvert [OPTIONS] <config-file>
+    mmdbconvert --config <config-file> [OPTIONS]
+
+OPTIONS:
+    --config <file>         Path to TOML configuration file
+    --var <NAME=VALUE>      Set a filesystem path parameter (repeatable)
+    --log-format <format>   Diagnostic format: auto (default), json, or text
+    --quiet                 Suppress progress output; errors remain visible
+    --disable-cache         Disable MMDB unmarshaler caching to reduce memory (several times slower)
+    --cpuprofile <file>     Write CPU profile to file
+    --memprofile <file>     Write memory profile to file
+    --help                  Show this help message
+    --version               Show version information
+
+LOGGING:
+    Progress and errors go to stderr. The auto format selects text when stderr
+    is a terminal and JSON otherwise. JSON records contain time, level, and
+    message fields, plus relevant attributes such as error or elapsed_ms.
+    Explicit help goes to stderr and version output to stdout, both as plain text.
+
+EXAMPLES:
+    # Basic usage with config file
+    mmdbconvert config.toml
+
+    # Using explicit flag
+    mmdbconvert --config config.toml
+
+    # Supply parameters used by filesystem paths in the config
+    mmdbconvert --config config.toml --var input_mmdb=/data/source.mmdb --var output_dir=/out
+
+    # Suppress progress output
+    mmdbconvert --config config.toml --quiet
+
+    # Force a diagnostic format
+    mmdbconvert --log-format=json config.toml
+    mmdbconvert --log-format=text config.toml
+
+    # Profile performance
+    mmdbconvert --config config.toml --cpuprofile cpu.prof --memprofile mem.prof --quiet
+
+CONFIGURATION:
+    Filesystem paths support ${name} parameters supplied with --var. Use $${name}
+    for literal ${name}. Values are substituted once, without environment lookup.
+    Values must be nonempty. Undefined references and unused variables are errors.
+    Relative paths resolve against the working directory. Put flags before a
+    positional config path.
+    See docs/config.md for configuration file format and options.
+
+MORE INFORMATION:
+    Documentation: https://github.com/maxmind/mmdbconvert
+    Report issues: https://github.com/maxmind/mmdbconvert/issues
+
+`,
+	)
+}
+
 func extraConfigArgsMessage(args []string) string {
 	for _, arg := range args {
 		if strings.HasPrefix(arg, "-") && arg != "-" {
@@ -251,67 +314,4 @@ func run(ctx context.Context, opts mmdbconvert.Options, logger *slog.Logger) err
 	)
 
 	return nil
-}
-
-func usage(w io.Writer) {
-	//nolint:errcheck // Usage is best effort; a write error means stderr is unavailable.
-	fmt.Fprint(
-		w,
-		`mmdbconvert - Merge MaxMind MMDB databases and export to CSV, Parquet, or MMDB
-
-USAGE:
-    mmdbconvert [OPTIONS] <config-file>
-    mmdbconvert --config <config-file> [OPTIONS]
-
-OPTIONS:
-    --config <file>         Path to TOML configuration file
-    --var <NAME=VALUE>      Set a filesystem path parameter (repeatable)
-    --log-format <format>   Diagnostic format: auto (default), json, or text
-    --quiet                 Suppress progress output; errors remain visible
-    --disable-cache         Disable MMDB unmarshaler caching to reduce memory (several times slower)
-    --cpuprofile <file>     Write CPU profile to file
-    --memprofile <file>     Write memory profile to file
-    --help                  Show this help message
-    --version               Show version information
-
-LOGGING:
-    Progress and errors go to stderr. The auto format selects text when stderr
-    is a terminal and JSON otherwise. JSON records contain time, level, and
-    message fields, plus relevant attributes such as error or elapsed_ms.
-    Explicit help goes to stderr and version output to stdout, both as plain text.
-
-EXAMPLES:
-    # Basic usage with config file
-    mmdbconvert config.toml
-
-    # Using explicit flag
-    mmdbconvert --config config.toml
-
-    # Supply parameters used by filesystem paths in the config
-    mmdbconvert --config config.toml --var input_mmdb=/data/source.mmdb --var output_dir=/out
-
-    # Suppress progress output
-    mmdbconvert --config config.toml --quiet
-
-    # Force a diagnostic format
-    mmdbconvert --log-format=json config.toml
-    mmdbconvert --log-format=text config.toml
-
-    # Profile performance
-    mmdbconvert --config config.toml --cpuprofile cpu.prof --memprofile mem.prof --quiet
-
-CONFIGURATION:
-    Filesystem paths support ${name} parameters supplied with --var. Use $${name}
-    for literal ${name}. Values are substituted once, without environment lookup.
-    Values must be nonempty. Undefined references and unused variables are errors.
-    Relative paths resolve against the working directory. Put flags before a
-    positional config path.
-    See docs/config.md for configuration file format and options.
-
-MORE INFORMATION:
-    Documentation: https://github.com/maxmind/mmdbconvert
-    Report issues: https://github.com/maxmind/mmdbconvert/issues
-
-`,
-	)
 }
