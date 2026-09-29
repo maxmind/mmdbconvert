@@ -47,6 +47,8 @@ and this project adheres to
 
 ### Fixed
 
+- Nested 128-bit unsigned integers in maps and arrays are now serialized as
+  exact JSON numbers in CSV and Parquet string columns.
 - Extra command-line arguments are now rejected instead of silently ignored.
 - CSV output now includes the configured header when no data rows are emitted,
   including when an IP family has no records. This applies when `include_header`
