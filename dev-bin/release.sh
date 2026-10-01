@@ -63,6 +63,11 @@ date="${BASH_REMATCH[3]}"
 notes="$(echo "${BASH_REMATCH[4]}" | sed -n -E '/^## \[?[0-9]+\.[0-9]+\.[0-9]+/,$!p')"
 tag="v$version"
 
+if ! grep -q '[^[:space:]]' <<<"$notes"; then
+    echo "Release notes for $tag are empty. Add notes to CHANGELOG.md." >&2
+    exit 1
+fi
+
 if [[ "$date" != "$(date +"%Y-%m-%d")" ]]; then
     echo "$date is not today!"
     exit 1
@@ -95,6 +100,7 @@ message="$version
 
 $notes"
 
-git tag -a -m "$message" "$tag"
+# "whitespace" keeps Markdown headings and adds a newline before a signature.
+git tag -a --cleanup=whitespace -m "$message" "$tag"
 
-git push --tags
+git push origin "refs/tags/$tag"

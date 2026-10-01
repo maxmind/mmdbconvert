@@ -44,9 +44,6 @@ checksum:
 snapshot:
   version_template: "{{ .Tag }}-next"
 
-changelog:
-  disable: true
-
 nfpms:
   - id: 'mmdbconvert'
     ids:
