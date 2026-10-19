@@ -4,7 +4,7 @@ go 1.27.0
 
 require (
 	github.com/maxmind/mmdbwriter/v2 v2.0.0-20260929214414-aa874fe6bc9e
-	github.com/oschwald/maxminddb-golang/v2 v2.7.0
+	github.com/oschwald/maxminddb-golang/v2 v2.8.0
 	github.com/parquet-go/parquet-go v0.32.0
 	github.com/pelletier/go-toml/v2 v2.4.3
 	github.com/stretchr/testify v1.12.1
