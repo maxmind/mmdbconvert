@@ -223,7 +223,7 @@ When `format = "mmdb"`, you can specify MMDB-specific options:
 database_type = "GeoIP2-City"  # Database type (required)
 description = { en = "Custom Database", de = "Benutzerdefinierte Datenbank" }  # Descriptions by language
 languages = ["en", "de"]  # List of languages (auto-populated from description if omitted)
-record_size = 28  # Record size: 24, 28, or 32 (default: 28)
+record_size = 0  # Record size: 24, 28, or 32, or 0 for the smallest that fits (default: 0)
 include_reserved_networks = false  # Include reserved networks (default: false)
 ```
 
@@ -231,6 +231,9 @@ include_reserved_networks = false  # Include reserved networks (default: false)
 
 - `database_type` is required for MMDB output
 - `languages` is auto-populated from `description` keys if not specified
+- If `record_size` is 0 or omitted, mmdbconvert uses the smallest record size
+  that fits the data. The size can change between runs as the data grows. Set
+  `record_size` to 24, 28, or 32 to keep a fixed size.
 - Split IPv4/IPv6 files are not supported for MMDB output (must use single
   `file`)
 - Network columns are not used for MMDB output (data is written by prefix)
@@ -722,7 +725,7 @@ file = "nested.mmdb"
 [output.mmdb]
 database_type = "GeoIP2-City"
 description = { en = "Nested Structure Example", de = "Beispiel für verschachtelte Strukturen" }
-record_size = 28
+# record_size = 28  # Uncomment to use a fixed record size
 include_reserved_networks = false
 
 [[databases]]
@@ -772,7 +775,7 @@ file = "enterprise-with-anonymous.mmdb"
 [output.mmdb]
 database_type = "GeoIP2-Enterprise"
 description = { en = "Enterprise + Anonymous IP Merged" }
-record_size = 28
+# record_size = 28  # Uncomment to use a fixed record size
 
 [[databases]]
 name = "enterprise"

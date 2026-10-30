@@ -299,7 +299,7 @@ file = "merged.mmdb"
 [output.mmdb]
 database_type = "GeoIP2-City"
 description = { en = "Merged GeoIP Database" }
-record_size = 28
+# record_size = 28  # Uncomment to use a fixed record size
 
 [[databases]]
 name = "city"
@@ -336,7 +336,8 @@ output_path = ["location", "longitude"]
 - Perfect type preservation from source databases
 - Support for nested structures via `output_path`
 - Compatible with all MMDB readers (libmaxminddb, etc.)
-- Configurable record size (24, 28, or 32 bits)
+- Smallest record size that fits the data by default, or a fixed size of 24, 28,
+  or 32 bits
 
 ## Querying Parquet Files
 
