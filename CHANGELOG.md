@@ -29,6 +29,10 @@ and this project adheres to
 - Filesystem paths now interpret `${name}` as a parameter, even when no
   variables are supplied. Undefined parameters and malformed placeholders are
   errors; escape a literal `${` as `$${`.
+- MMDB output now uses the smallest record size that fits the database when
+  `record_size` is omitted. Small databases can now use 24-bit records instead
+  of 28-bit records, and the record size can change as the data grows. Set
+  `record_size` to keep a fixed size.
 - Updated to mmdbwriter/v2 for faster MMDB output with lower memory usage.
 - Go 1.27 or later is now required to build from source.
 - Progress output now goes to stderr alongside errors and uses structured

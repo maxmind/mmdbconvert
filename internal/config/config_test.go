@@ -692,6 +692,28 @@ path = ["country", "iso_code"]
 			expectError: "either output.file must be set or both output.ipv4_file and output.ipv6_file must be provided",
 		},
 		{
+			name: "invalid MMDB record size",
+			toml: `
+[output]
+format = "mmdb"
+file = "output.mmdb"
+
+[output.mmdb]
+database_type = "Test"
+record_size = 26
+
+[[databases]]
+name = "geo"
+path = "/path/to/geo.mmdb"
+
+[[columns]]
+name = "country"
+database = "geo"
+path = ["country", "iso_code"]
+`,
+			expectError: "output.mmdb.record_size must be 24, 28, or 32, got 26",
+		},
+		{
 			name: "no databases",
 			toml: `
 [output]
@@ -1294,6 +1316,20 @@ func TestApplyDefaults(t *testing.T) {
 							cfg.Network.Columns[1].Type,
 						)
 					}
+				}
+			},
+		},
+		{
+			name: "MMDB record size is left unset",
+			input: Config{
+				Output: OutputConfig{Format: "mmdb"},
+			},
+			validate: func(t *testing.T, cfg *Config) {
+				if cfg.Output.MMDB.RecordSize != nil {
+					t.Errorf(
+						"expected nil RecordSize, got %d",
+						*cfg.Output.MMDB.RecordSize,
+					)
 				}
 			},
 		},
