@@ -223,7 +223,7 @@ When `format = "mmdb"`, you can specify MMDB-specific options:
 database_type = "GeoIP2-City"  # Database type (required)
 description = { en = "Custom Database", de = "Benutzerdefinierte Datenbank" }  # Descriptions by language
 languages = ["en", "de"]  # List of languages (auto-populated from description if omitted)
-record_size = 28  # Record size: 24, 28, or 32 (default: 28)
+record_size = 28  # Record size: 24, 28, or 32 (default: smallest that fits)
 include_reserved_networks = false  # Include reserved networks (default: false)
 ```
 

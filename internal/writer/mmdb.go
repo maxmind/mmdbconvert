@@ -25,11 +25,17 @@ func NewMMDBWriter(output io.Writer, cfg *config.Config, ipVersion int) (*MMDBWr
 		return nil, fmt.Errorf("invalid IP version: %d", ipVersion)
 	}
 
+	// A zero record size makes mmdbwriter choose the smallest size that fits.
+	recordSize := 0
+	if cfg.Output.MMDB.RecordSize != nil {
+		recordSize = *cfg.Output.MMDB.RecordSize
+	}
+
 	tree, err := mmdbwriter.New(mmdbwriter.Options{
 		DatabaseType:            cfg.Output.MMDB.DatabaseType,
 		Description:             cfg.Output.MMDB.Description,
 		Languages:               cfg.Output.MMDB.Languages,
-		RecordSize:              *cfg.Output.MMDB.RecordSize,
+		RecordSize:              recordSize,
 		IPVersion:               ipVersion,
 		IncludeReservedNetworks: *cfg.Output.MMDB.IncludeReservedNetworks,
 	})
