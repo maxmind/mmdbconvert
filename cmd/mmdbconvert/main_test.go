@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/oschwald/maxminddb-golang/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -183,6 +184,53 @@ func TestRunCLISuccess(t *testing.T) {
 				})
 			}
 		}
+	}
+}
+
+func TestRunCLIMMDBRecordSize(t *testing.T) {
+	tests := []struct {
+		name       string
+		setting    string
+		recordSize uint
+	}{
+		{name: "omitted", recordSize: 24},
+		{name: "zero", setting: "record_size = 0", recordSize: 24},
+		{name: "explicit", setting: "record_size = 28", recordSize: 28},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			configPath := filepath.Join(dir, "config.toml")
+			outputPath := filepath.Join(dir, "output.mmdb")
+			config := `
+[output]
+format = "mmdb"
+file = "` + filepath.ToSlash(outputPath) + `"
+
+[output.mmdb]
+database_type = "Test"
+` + tt.setting + `
+
+[[databases]]
+name = "city"
+path = "` + filepath.ToSlash(testDatabasePath(t)) + `"
+
+[[columns]]
+name = "country_code"
+database = "city"
+path = ["country", "iso_code"]
+`
+			require.NoError(t, os.WriteFile(configPath, []byte(config), 0o600))
+
+			var stdout, stderr bytes.Buffer
+			args := []string{"--quiet", configPath}
+			require.Equal(t, 0, runCLI(t.Context(), args, &stdout, &stderr, false), stderr.String())
+
+			reader, err := maxminddb.Open(outputPath)
+			require.NoError(t, err)
+			defer reader.Close()
+			assert.Equal(t, tt.recordSize, reader.Metadata.RecordSize)
+		})
 	}
 }
 

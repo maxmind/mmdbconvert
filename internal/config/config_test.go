@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -509,6 +510,30 @@ path = ["country", "iso_code"]
 				}
 			},
 		},
+		{
+			name: "MMDB record size 0 chooses the size automatically",
+			toml: `
+[output]
+format = "mmdb"
+file = "output.mmdb"
+
+[output.mmdb]
+database_type = "Test"
+record_size = 0
+
+[[databases]]
+name = "geo"
+path = "/path/to/geo.mmdb"
+
+[[columns]]
+name = "country"
+database = "geo"
+path = ["country", "iso_code"]
+`,
+			validate: func(t *testing.T, cfg *Config) {
+				assert.Zero(t, cfg.Output.MMDB.RecordSize)
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -690,6 +715,28 @@ database = "geo"
 path = ["country", "iso_code"]
 `,
 			expectError: "either output.file must be set or both output.ipv4_file and output.ipv6_file must be provided",
+		},
+		{
+			name: "invalid MMDB record size",
+			toml: `
+[output]
+format = "mmdb"
+file = "output.mmdb"
+
+[output.mmdb]
+database_type = "Test"
+record_size = 26
+
+[[databases]]
+name = "geo"
+path = "/path/to/geo.mmdb"
+
+[[columns]]
+name = "country"
+database = "geo"
+path = ["country", "iso_code"]
+`,
+			expectError: "output.mmdb.record_size must be 0, 24, 28, or 32, got 26",
 		},
 		{
 			name: "no databases",
@@ -1295,6 +1342,15 @@ func TestApplyDefaults(t *testing.T) {
 						)
 					}
 				}
+			},
+		},
+		{
+			name: "MMDB record size is left unset",
+			input: Config{
+				Output: OutputConfig{Format: "mmdb"},
+			},
+			validate: func(t *testing.T, cfg *Config) {
+				assert.Zero(t, cfg.Output.MMDB.RecordSize)
 			},
 		},
 		{
