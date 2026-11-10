@@ -14,6 +14,32 @@ import (
 	"github.com/maxmind/mmdbconvert/internal/config"
 )
 
+func TestMMDBWriter_AutoRecordSize(t *testing.T) {
+	includeReserved := false
+	cfg := &config.Config{
+		Output: config.OutputConfig{
+			MMDB: config.MMDBConfig{
+				DatabaseType:            "AutoRecordSize-Test",
+				IncludeReservedNetworks: &includeReserved,
+			},
+		},
+		Columns: []config.Column{{Name: "count"}},
+	}
+	var output bytes.Buffer
+	writer, err := NewMMDBWriter(&output, cfg, 4)
+	require.NoError(t, err)
+	require.NoError(t, writer.WriteRow(
+		netip.MustParsePrefix("1.2.3.0/24"),
+		[]mmdbtype.DataType{mmdbtype.Uint32(1)},
+	))
+	require.NoError(t, writer.Flush())
+
+	reader, err := maxminddb.OpenBytes(output.Bytes())
+	require.NoError(t, err)
+	defer reader.Close()
+	assert.EqualValues(t, 24, reader.Metadata.RecordSize)
+}
+
 func TestMMDBWriter_RoundTrip(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -36,7 +62,7 @@ func TestMMDBWriter_RoundTrip(t *testing.T) {
 						DatabaseType:            "RoundTrip-Test",
 						Description:             map[string]string{"en": "Round trip test"},
 						Languages:               []string{"en"},
-						RecordSize:              &recordSize,
+						RecordSize:              recordSize,
 						IncludeReservedNetworks: &includeReserved,
 					},
 				},
@@ -102,7 +128,7 @@ func TestMMDBWriter_InvalidNetworks(t *testing.T) {
 	cfg := &config.Config{
 		Output: config.OutputConfig{
 			MMDB: config.MMDBConfig{
-				RecordSize:              &recordSize,
+				RecordSize:              recordSize,
 				IncludeReservedNetworks: &includeReserved,
 			},
 		},

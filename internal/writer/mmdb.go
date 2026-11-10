@@ -29,7 +29,7 @@ func NewMMDBWriter(output io.Writer, cfg *config.Config, ipVersion int) (*MMDBWr
 		DatabaseType:            cfg.Output.MMDB.DatabaseType,
 		Description:             cfg.Output.MMDB.Description,
 		Languages:               cfg.Output.MMDB.Languages,
-		RecordSize:              *cfg.Output.MMDB.RecordSize,
+		RecordSize:              cfg.Output.MMDB.RecordSize,
 		IPVersion:               ipVersion,
 		IncludeReservedNetworks: *cfg.Output.MMDB.IncludeReservedNetworks,
 	})

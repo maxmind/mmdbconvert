@@ -8,7 +8,7 @@ file = "city-with-anonymous.mmdb"
 [output.mmdb]
 database_type = "GeoIP2-City"
 description = { en = "City + Anonymous IP Merged" }
-record_size = 28
+# record_size = 28  # Uncomment to use a fixed record size
 
 [[databases]]
 name = "city"

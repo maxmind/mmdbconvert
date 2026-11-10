@@ -46,7 +46,7 @@ func TestEndToEnd_MMDBExport(t *testing.T) {
 					Format: config.OutputFormatMMDB,
 					MMDB: config.MMDBConfig{
 						DatabaseType:            source.Metadata().DatabaseType,
-						RecordSize:              &recordSize,
+						RecordSize:              recordSize,
 						IncludeReservedNetworks: &includeReserved,
 					},
 				},

@@ -105,7 +105,7 @@ type MMDBConfig struct {
 	DatabaseType            string            `toml:"database_type"`             // Database type (e.g., "GeoIP2-City")
 	Description             map[string]string `toml:"description"`               // Descriptions by language
 	Languages               []string          `toml:"languages"`                 // List of languages (auto-populated from description if empty)
-	RecordSize              *int              `toml:"record_size"`               // 24, 28, or 32 (default: 28)
+	RecordSize              int               `toml:"record_size"`               // 24, 28, or 32, or 0 for the smallest that fits (default: 0)
 	IncludeReservedNetworks *bool             `toml:"include_reserved_networks"` // Include reserved networks (default: false)
 }
 
@@ -250,9 +250,6 @@ func applyDefaults(config *Config) {
 
 	// MMDB defaults
 	if config.Output.Format == OutputFormatMMDB {
-		if config.Output.MMDB.RecordSize == nil {
-			config.Output.MMDB.RecordSize = new(28)
-		}
 		if config.Output.MMDB.IncludeReservedNetworks == nil {
 			config.Output.MMDB.IncludeReservedNetworks = new(false)
 		}
@@ -347,11 +344,9 @@ func validate(config *Config, data []byte) error {
 			return errors.New("output.mmdb.database_type is required for MMDB output")
 		}
 
-		if config.Output.MMDB.RecordSize != nil {
-			rs := *config.Output.MMDB.RecordSize
-			if rs != 24 && rs != 28 && rs != 32 {
-				return fmt.Errorf("output.mmdb.record_size must be 24, 28, or 32, got %d", rs)
-			}
+		rs := config.Output.MMDB.RecordSize
+		if rs != 0 && rs != 24 && rs != 28 && rs != 32 {
+			return fmt.Errorf("output.mmdb.record_size must be 0, 24, 28, or 32, got %d", rs)
 		}
 
 		// Reject split files for MMDB
