@@ -38,6 +38,8 @@ and this project adheres to
 
 - The macOS binaries now require macOS 13 Ventura or later, because Go 1.27
   dropped support for macOS 12.
+- The Linux amd64 binary is now statically linked. The 0.2.1 binary required
+  glibc 2.34 or later.
 - The Go library's `Run` now requires a `context.Context` as its first argument.
   Pass `context.Background()` when cancellation is not needed.
 - Filesystem paths now interpret `${name}` as a parameter, even when no

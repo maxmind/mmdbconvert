@@ -7,6 +7,8 @@ before:
 
 builds:
   - id: 'mmdbconvert'
+    env:
+      - 'CGO_ENABLED=0'
     main: './cmd/mmdbconvert/'
     binary: 'mmdbconvert'
     goos:
