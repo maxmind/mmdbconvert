@@ -6,7 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.3.0]
+
+### Security
+
+- The release binaries are built with the current Go release. The 0.2.1 binaries
+  used Go 1.25.9, which has known standard-library vulnerabilities.
+- Updated `github.com/oschwald/maxminddb-golang/v2` from v2.1.1 to v2.9.0. This
+  fixes a denial of service from a crafted database,
+  [GHSA-hj94-g986-h9r7](https://github.com/maxmind/MaxMind-DB-Reader-python/security/advisories/GHSA-hj94-g986-h9r7).
+- Updated `github.com/klauspost/compress` from v1.18.2 to v1.18.7. This fixes
+  GO-2026-5841, an out-of-bounds read in `s2`.
+- Updated `golang.org/x/sys` from v0.39.0 to v0.49.0. This fixes GO-2026-5024,
+  an integer overflow in `windows.NewNTUnicodeString`.
 
 ### Added
 
@@ -24,6 +36,8 @@ and this project adheres to
 
 ### Changed
 
+- The macOS binaries now require macOS 13 Ventura or later, because Go 1.27
+  dropped support for macOS 12.
 - The Go library's `Run` now requires a `context.Context` as its first argument.
   Pass `context.Background()` when cancellation is not needed.
 - Filesystem paths now interpret `${name}` as a parameter, even when no
@@ -131,7 +145,8 @@ and this project adheres to
 - Multi-database merge validation
 - Performance testing (< 10ms for small databases, 7MB memory)
 
-[Unreleased]: https://github.com/maxmind/mmdbconvert/compare/v0.2.1...main
+[Unreleased]: https://github.com/maxmind/mmdbconvert/compare/v0.3.0...main
+[0.3.0]: https://github.com/maxmind/mmdbconvert/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/maxmind/mmdbconvert/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/maxmind/mmdbconvert/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/maxmind/mmdbconvert/releases/tag/v0.1.0
