@@ -7,6 +7,8 @@ import (
 
 	"github.com/maxmind/mmdbwriter/v2/mmdbtype"
 	"go4.org/netipx"
+
+	"github.com/maxmind/mmdbconvert/internal/merger"
 )
 
 type rowWriter interface {
@@ -52,10 +54,8 @@ func (s *SplitRowWriter) WriteRange(start, end netip.Addr, data []mmdbtype.DataT
 			return errors.New("no IPv4 writer configured")
 		}
 		// Check if the underlying writer implements WriteRange
-		if rangeWriter, ok := s.ipv4.(interface {
-			WriteRange(netip.Addr, netip.Addr, []mmdbtype.DataType) error
-		}); ok {
-			if err := rangeWriter.WriteRange(start, end, data); err != nil {
+		if rw, ok := s.ipv4.(merger.RangeRowWriter); ok {
+			if err := rw.WriteRange(start, end, data); err != nil {
 				return fmt.Errorf("writing IPv4 range to underlying writer: %w", err)
 			}
 			return nil
@@ -73,10 +73,8 @@ func (s *SplitRowWriter) WriteRange(start, end netip.Addr, data []mmdbtype.DataT
 		return errors.New("no IPv6 writer configured")
 	}
 	// Check if the underlying writer implements WriteRange
-	if rangeWriter, ok := s.ipv6.(interface {
-		WriteRange(netip.Addr, netip.Addr, []mmdbtype.DataType) error
-	}); ok {
-		if err := rangeWriter.WriteRange(start, end, data); err != nil {
+	if rw, ok := s.ipv6.(merger.RangeRowWriter); ok {
+		if err := rw.WriteRange(start, end, data); err != nil {
 			return fmt.Errorf("writing IPv6 range to underlying writer: %w", err)
 		}
 		return nil
