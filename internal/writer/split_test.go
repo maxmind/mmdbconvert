@@ -297,13 +297,9 @@ func TestSplitRowWriter_ImplementsRangeRowWriter(t *testing.T) {
 	assert.Equal(t, end, v4.ranges[0][1])
 }
 
-// TestSplitRowWriter_RangeCompressionWithAccumulator tests the complete
-// integration with merger.Accumulator to prove WriteRange is actually called.
+// TestSplitRowWriter_RangeCompressionWithAccumulator simulates how
+// merger.Accumulator uses a RangeRowWriter, to prove WriteRange is called.
 func TestSplitRowWriter_RangeCompressionWithAccumulator(t *testing.T) {
-	// Import the merger package to use Accumulator
-	// (Note: This would normally be in an integration test, but we're testing
-	// the interface contract here)
-
 	v4 := &rangeRecordWriter{}
 	v6 := &rangeRecordWriter{}
 	split := NewSplitRowWriter(v4, v6)
