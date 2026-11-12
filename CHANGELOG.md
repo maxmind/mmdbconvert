@@ -15,8 +15,11 @@ and this project adheres to
 - Updated `github.com/oschwald/maxminddb-golang/v2` from v2.1.1 to v2.9.0. This
   fixes a denial of service from a crafted database,
   [GHSA-hj94-g986-h9r7](https://github.com/maxmind/MaxMind-DB-Reader-python/security/advisories/GHSA-hj94-g986-h9r7).
-- Updated `github.com/klauspost/compress` from v1.18.2 to v1.18.7. This fixes
-  GO-2026-5841, an out-of-bounds read in `s2`.
+- Updated `github.com/klauspost/compress` from v1.18.2 to v1.20.4. This fixes
+  GO-2026-5841, an out-of-bounds read in `s2`, and GO-2026-6865, a panic on
+  two-block frames.
+- Updated `github.com/andybalholm/brotli` from v1.2.0 to v1.3.0. This fixes
+  GO-2026-6888, excessive memory allocation when decompressing crafted streams.
 - Updated `golang.org/x/sys` from v0.39.0 to v0.49.0. This fixes GO-2026-5024,
   an integer overflow in `windows.NewNTUnicodeString`.
 
