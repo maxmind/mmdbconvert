@@ -7,6 +7,10 @@ before:
 
 builds:
   - id: 'mmdbconvert'
+    env:
+      - 'CGO_ENABLED=0'
+    flags:
+      - '-trimpath'
     main: './cmd/mmdbconvert/'
     binary: 'mmdbconvert'
     goos:

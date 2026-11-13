@@ -8,6 +8,8 @@ import (
 	"github.com/maxmind/mmdbwriter/v2/mmdbtype"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/maxmind/mmdbconvert/internal/merger"
 )
 
 type recordWriter struct {
@@ -277,12 +279,7 @@ func TestSplitRowWriter_ImplementsRangeRowWriter(t *testing.T) {
 
 	// Verify that SplitRowWriter satisfies the RangeRowWriter interface
 	// This is the same check that merger.Accumulator.Flush() performs
-	type rangeRowWriter interface {
-		WriteRange(netip.Addr, netip.Addr, []mmdbtype.DataType) error
-	}
-
-	// This type assertion must succeed for the feature to work
-	_, ok := any(split).(rangeRowWriter)
+	_, ok := any(split).(merger.RangeRowWriter)
 	assert.True(t, ok, "SplitRowWriter must implement RangeRowWriter interface")
 
 	// Verify it actually calls WriteRange on the underlying writer
@@ -300,24 +297,16 @@ func TestSplitRowWriter_ImplementsRangeRowWriter(t *testing.T) {
 	assert.Equal(t, end, v4.ranges[0][1])
 }
 
-// TestSplitRowWriter_RangeCompressionWithAccumulator tests the complete
-// integration with merger.Accumulator to prove WriteRange is actually called.
+// TestSplitRowWriter_RangeCompressionWithAccumulator simulates how
+// merger.Accumulator uses a RangeRowWriter, to prove WriteRange is called.
 func TestSplitRowWriter_RangeCompressionWithAccumulator(t *testing.T) {
-	// Import the merger package to use Accumulator
-	// (Note: This would normally be in an integration test, but we're testing
-	// the interface contract here)
-
 	v4 := &rangeRecordWriter{}
 	v6 := &rangeRecordWriter{}
 	split := NewSplitRowWriter(v4, v6)
 
-	// Simulate what merger.Accumulator does: check for RangeRowWriter
-	type rangeRowWriter interface {
-		WriteRange(netip.Addr, netip.Addr, []mmdbtype.DataType) error
-	}
-
+	// Simulate what merger.Accumulator does: check for RangeRowWriter.
 	// When Accumulator.Flush() runs, it does this check:
-	if rangeWriter, ok := any(split).(rangeRowWriter); ok {
+	if rw, ok := any(split).(merger.RangeRowWriter); ok {
 		// It should call WriteRange with a range of adjacent networks
 		start := netip.MustParseAddr("10.0.0.0")
 		end := netip.MustParseAddr("10.0.3.255") // Covers 4 /24s
@@ -326,7 +315,7 @@ func TestSplitRowWriter_RangeCompressionWithAccumulator(t *testing.T) {
 			mmdbtype.String("US"),
 		}
 
-		require.NoError(t, rangeWriter.WriteRange(start, end, data))
+		require.NoError(t, rw.WriteRange(start, end, data))
 
 		// Verify WriteRange was called on v4 writer (not WriteRow)
 		require.Len(t, v4.ranges, 1, "should call WriteRange once")
